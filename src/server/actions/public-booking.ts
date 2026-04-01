@@ -3,9 +3,9 @@
 import { z } from 'zod';
 import { addMinutes, startOfDay, endOfDay } from 'date-fns';
 import { prisma } from '@/lib/prisma';
-import { validateBooking } from '@/lib/booking-validation';
+import { createBookingCore } from '@/server/services/booking-service';
 import { getAvailableSlots } from '@/lib/slots';
-import { sendSMS } from '@/lib/twilio';
+import { sendSMS, logSms } from '@/lib/twilio';
 import { bookingConfirmationMessage } from '@/lib/sms-templates';
 
 const publicBookingSchema = z.object({
@@ -69,11 +69,6 @@ export async function createPublicBooking(
   const startTime = new Date(parsed.data.startTime);
   const endTime = addMinutes(startTime, duration);
 
-  const conflict = await validateBooking(stylist.id, startTime, endTime);
-  if (conflict) {
-    return { success: false, error: conflict };
-  }
-
   // Find or create client by phone + salon
   let client = await prisma.client.findFirst({
     where: { phone: parsed.data.clientPhone, salonId: salon.id },
@@ -91,30 +86,43 @@ export async function createPublicBooking(
     });
   }
 
-  const booking = await prisma.booking.create({
-    data: {
+  let booking;
+  try {
+    booking = await createBookingCore({
+      stylistId: stylist.id,
+      serviceId: service.id,
+      salonId: salon.id,
       startTime,
       endTime,
       price,
-      notes: parsed.data.notes || null,
       clientId: client.id,
-      serviceId: service.id,
-      stylistId: stylist.id,
-      salonId: salon.id,
-    },
-  });
+      notes: parsed.data.notes || null,
+    });
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : 'Booking failed' };
+  }
 
   // Send confirmation SMS (fire-and-forget)
   if (client.phone) {
-    void sendSMS(
-      client.phone,
-      bookingConfirmationMessage({
-        clientName: client.name,
-        salonName: salon.name,
-        serviceName: service.name,
-        stylistName: stylist.name,
-        startTime,
-        price,
+    const smsBody = bookingConfirmationMessage({
+      clientName: client.name,
+      salonName: salon.name,
+      serviceName: service.name,
+      stylistName: stylist.name,
+      startTime,
+      price,
+    });
+    const smsResult = sendSMS(client.phone, smsBody);
+    void smsResult.then((result) =>
+      logSms({
+        direction: 'OUTBOUND',
+        phone: client.phone!,
+        body: smsBody,
+        status: result.success ? 'sent' : 'failed',
+        twilioSid: result.sid,
+        bookingId: booking.id,
+        clientId: client.id,
+        salonId: salon.id,
       })
     );
   }

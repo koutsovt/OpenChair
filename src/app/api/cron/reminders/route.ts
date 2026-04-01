@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { addDays, startOfDay, endOfDay } from 'date-fns';
 import { prisma } from '@/lib/prisma';
-import { sendSMS } from '@/lib/twilio';
+import { sendSMS, logSms } from '@/lib/twilio';
 import { bookingReminderMessage } from '@/lib/sms-templates';
 import { env } from '@/lib/env';
 
@@ -47,6 +47,18 @@ export async function GET(request: Request) {
       });
 
       const result = await sendSMS(phone, message);
+
+      void logSms({
+        direction: 'OUTBOUND',
+        phone,
+        body: message,
+        status: result.success ? 'sent' : 'failed',
+        twilioSid: result.sid,
+        bookingId: booking.id,
+        clientId: booking.clientId ?? undefined,
+        salonId: booking.salonId,
+      });
+
       return { bookingId: booking.id, sent: result.success, error: result.error };
     })
   );

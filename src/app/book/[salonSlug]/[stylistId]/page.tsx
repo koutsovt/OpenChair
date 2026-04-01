@@ -16,7 +16,7 @@ export default async function StylistSlotPage({ params, searchParams }: PageProp
     notFound();
   }
 
-  const salon = await prisma.salon.findUnique({
+  const salon = await prisma.salon.findFirst({
     where: { slug: salonSlug, isActive: true },
   });
 

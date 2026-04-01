@@ -2,36 +2,18 @@
 
 import { revalidatePath } from 'next/cache';
 import { addMinutes, startOfDay, endOfDay } from 'date-fns';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { prisma } from '@/lib/prisma';
 import { validateBooking } from '@/lib/booking-validation';
+import { createBookingCore } from '@/server/services/booking-service';
 import { getAvailableSlots } from '@/lib/slots';
 import { createBookingSchema } from '@/lib/validations/booking';
-import { sendSMS } from '@/lib/twilio';
-import { bookingConfirmationMessage } from '@/lib/sms-templates';
+import { sendSMS, logSms } from '@/lib/twilio';
+import { bookingConfirmationMessage, bookingRescheduledMessage } from '@/lib/sms-templates';
+import { autoAssignStylist } from '@/lib/scheduling/auto-assign';
+import { matchWaitlistEntries, notifyWaitlistClient } from '@/lib/scheduling/waitlist';
+import { getSuggestedSlots as getSuggestedSlotsLib } from '@/lib/scheduling/smart-suggestions';
+import { getAuthenticatedSalon } from '@/server/auth';
 import type { BookingStatus } from '@/types';
-
-async function getAuthenticatedSalon() {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
-
-  if (!authUser) {
-    throw new Error('Not authenticated');
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { supabaseId: authUser.id },
-    include: { salon: true },
-  });
-
-  if (!user?.salon) {
-    throw new Error('No salon found');
-  }
-
-  return user.salon;
-}
 
 export async function createBooking(data: {
   stylistId: string;
@@ -57,8 +39,24 @@ export async function createBooking(data: {
     return { success: false, error: 'Service not found' };
   }
 
+  // Auto-assign stylist if requested
+  let resolvedStylistId = parsed.data.stylistId;
+  if (resolvedStylistId === 'auto') {
+    const startTime = new Date(parsed.data.startTime);
+    const assignment = await autoAssignStylist(
+      salon.id,
+      parsed.data.serviceId,
+      startTime,
+      parsed.data.clientId
+    );
+    if (!assignment) {
+      return { success: false, error: 'No available stylist for this time' };
+    }
+    resolvedStylistId = assignment.stylistId;
+  }
+
   const stylist = await prisma.stylist.findFirst({
-    where: { id: parsed.data.stylistId, salonId: salon.id, isActive: true },
+    where: { id: resolvedStylistId, salonId: salon.id, isActive: true },
   });
 
   if (!stylist) {
@@ -79,41 +77,47 @@ export async function createBooking(data: {
   const startTime = new Date(parsed.data.startTime);
   const endTime = addMinutes(startTime, service.duration);
 
-  const conflict = await validateBooking(stylist.id, startTime, endTime);
-  if (conflict) {
-    return { success: false, error: conflict };
-  }
-
-  const booking = await prisma.booking.create({
-    data: {
+  let booking;
+  try {
+    booking = await createBookingCore({
+      stylistId: stylist.id,
+      serviceId: service.id,
+      salonId: salon.id,
       startTime,
       endTime,
       price: service.price,
-      notes: parsed.data.notes || null,
       clientId: parsed.data.clientId || null,
       guestName: parsed.data.guestName || null,
       guestPhone: parsed.data.guestPhone || null,
-      serviceId: service.id,
-      stylistId: stylist.id,
-      salonId: salon.id,
-    },
-  });
+      notes: parsed.data.notes || null,
+    });
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : 'Booking failed' };
+  }
 
   // Send confirmation SMS (fire-and-forget)
   const phone = client?.phone ?? parsed.data.guestPhone;
 
   if (phone) {
     const clientName = client?.name ?? parsed.data.guestName ?? 'there';
-
-    void sendSMS(
-      phone,
-      bookingConfirmationMessage({
-        clientName,
-        salonName: salon.name,
-        serviceName: service.name,
-        stylistName: stylist.name,
-        startTime,
-        price: service.price,
+    const smsBody = bookingConfirmationMessage({
+      clientName,
+      salonName: salon.name,
+      serviceName: service.name,
+      stylistName: stylist.name,
+      startTime,
+      price: service.price,
+    });
+    void sendSMS(phone, smsBody).then((result) =>
+      logSms({
+        direction: 'OUTBOUND',
+        phone,
+        body: smsBody,
+        status: result.success ? 'sent' : 'failed',
+        twilioSid: result.sid,
+        bookingId: booking.id,
+        clientId: client?.id,
+        salonId: salon.id,
       })
     );
   }
@@ -130,6 +134,7 @@ export async function updateBookingStatus(
 
   const booking = await prisma.booking.findFirst({
     where: { id, salonId: salon.id },
+    include: { service: true, stylist: true },
   });
 
   if (!booking) {
@@ -144,6 +149,28 @@ export async function updateBookingStatus(
     },
   });
 
+  // When a booking is cancelled, check waitlist for matching entries
+  if (status === 'CANCELLED') {
+    void (async () => {
+      const matches = await matchWaitlistEntries(
+        salon.id,
+        booking.stylistId,
+        booking.serviceId,
+        booking.startTime,
+        booking.endTime
+      );
+
+      if (matches.length > 0) {
+        await notifyWaitlistClient(matches[0].id, {
+          salonName: salon.name,
+          serviceName: booking.service.name,
+          stylistName: booking.stylist.name,
+          startTime: booking.startTime,
+        });
+      }
+    })();
+  }
+
   revalidatePath('/bookings');
   revalidatePath(`/bookings/${id}`);
   return { success: true };
@@ -151,31 +178,81 @@ export async function updateBookingStatus(
 
 export async function rescheduleBooking(
   id: string,
-  newStartTime: string
+  newStartTime: string,
+  newStylistId?: string
 ): Promise<{ success: true } | { success: false; error: string }> {
   const salon = await getAuthenticatedSalon();
 
   const booking = await prisma.booking.findFirst({
     where: { id, salonId: salon.id },
-    include: { service: true },
+    include: { service: true, client: true, stylist: true },
   });
 
   if (!booking) {
     return { success: false, error: 'Booking not found' };
   }
 
+  const targetStylistId = newStylistId ?? booking.stylistId;
+
+  // If changing stylist, validate the new stylist exists and offers the service
+  if (newStylistId && newStylistId !== booking.stylistId) {
+    const newStylist = await prisma.stylist.findFirst({
+      where: { id: newStylistId, salonId: salon.id, isActive: true },
+    });
+    if (!newStylist) {
+      return { success: false, error: 'Stylist not found' };
+    }
+
+    const hasService = await prisma.stylistService.findUnique({
+      where: { stylistId_serviceId: { stylistId: newStylistId, serviceId: booking.serviceId } },
+    });
+    if (!hasService) {
+      return { success: false, error: 'Stylist does not offer this service' };
+    }
+  }
+
   const start = new Date(newStartTime);
   const end = addMinutes(start, booking.service.duration);
 
-  const conflict = await validateBooking(booking.stylistId, start, end, id);
+  const conflict = await validateBooking(targetStylistId, start, end, id);
   if (conflict) {
     return { success: false, error: conflict };
   }
 
-  await prisma.booking.update({
+  const updatedBooking = await prisma.booking.update({
     where: { id },
-    data: { startTime: start, endTime: end },
+    data: {
+      startTime: start,
+      endTime: end,
+      stylistId: targetStylistId,
+    },
+    include: { stylist: true, service: true },
   });
+
+  // Send rescheduled SMS to client
+  const phone = booking.client?.phone ?? booking.guestPhone;
+  if (phone) {
+    const clientName = booking.client?.name ?? booking.guestName ?? 'there';
+    const smsBody = bookingRescheduledMessage({
+      clientName,
+      salonName: salon.name,
+      serviceName: updatedBooking.service.name,
+      stylistName: updatedBooking.stylist.name,
+      startTime: start,
+    });
+    void sendSMS(phone, smsBody).then((result) =>
+      logSms({
+        direction: 'OUTBOUND',
+        phone,
+        body: smsBody,
+        status: result.success ? 'sent' : 'failed',
+        twilioSid: result.sid,
+        bookingId: id,
+        clientId: booking.clientId ?? undefined,
+        salonId: salon.id,
+      })
+    );
+  }
 
   revalidatePath('/bookings');
   revalidatePath(`/bookings/${id}`);
@@ -227,5 +304,169 @@ export async function getAvailableSlotsAction(
   return slots.map((s) => ({
     start: s.start.toISOString(),
     end: s.end.toISOString(),
+  }));
+}
+
+export async function reassignStylistBookings(
+  absentStylistId: string,
+  date: string,
+  targetStylistId?: string
+): Promise<
+  | {
+      success: true;
+      reassigned: number;
+      failed: { bookingId: string; error: string }[];
+    }
+  | { success: false; error: string }
+> {
+  const salon = await getAuthenticatedSalon();
+
+  const absentStylist = await prisma.stylist.findFirst({
+    where: { id: absentStylistId, salonId: salon.id },
+  });
+  if (!absentStylist) {
+    return { success: false, error: 'Stylist not found' };
+  }
+
+  if (targetStylistId) {
+    const target = await prisma.stylist.findFirst({
+      where: { id: targetStylistId, salonId: salon.id, isActive: true },
+    });
+    if (!target) {
+      return { success: false, error: 'Target stylist not found' };
+    }
+  }
+
+  const targetDate = new Date(date);
+  const dayStart = startOfDay(targetDate);
+  const dayEnd = endOfDay(targetDate);
+
+  const bookings = await prisma.booking.findMany({
+    where: {
+      stylistId: absentStylistId,
+      salonId: salon.id,
+      startTime: { gte: dayStart },
+      endTime: { lte: dayEnd },
+      status: { in: ['PENDING', 'CONFIRMED'] },
+    },
+    include: { service: true, client: true },
+  });
+
+  if (bookings.length === 0) {
+    return { success: true, reassigned: 0, failed: [] };
+  }
+
+  let reassigned = 0;
+  const failed: { bookingId: string; error: string }[] = [];
+
+  for (const booking of bookings) {
+    let newStylistId = targetStylistId;
+
+    if (!newStylistId) {
+      const assignment = await autoAssignStylist(
+        salon.id,
+        booking.serviceId,
+        booking.startTime,
+        booking.clientId ?? undefined
+      );
+      if (!assignment) {
+        failed.push({ bookingId: booking.id, error: 'No available stylist' });
+        continue;
+      }
+      newStylistId = assignment.stylistId;
+    }
+
+    const conflict = await validateBooking(
+      newStylistId,
+      booking.startTime,
+      booking.endTime,
+      booking.id
+    );
+    if (conflict) {
+      failed.push({ bookingId: booking.id, error: conflict });
+      continue;
+    }
+
+    const hasService = await prisma.stylistService.findUnique({
+      where: {
+        stylistId_serviceId: { stylistId: newStylistId, serviceId: booking.serviceId },
+      },
+    });
+    if (!hasService) {
+      failed.push({ bookingId: booking.id, error: 'Target stylist does not offer this service' });
+      continue;
+    }
+
+    const updated = await prisma.booking.update({
+      where: { id: booking.id },
+      data: { stylistId: newStylistId },
+      include: { stylist: true },
+    });
+
+    const phone = booking.client?.phone ?? booking.guestPhone;
+    if (phone) {
+      const clientName = booking.client?.name ?? booking.guestName ?? 'there';
+      const smsBody = bookingRescheduledMessage({
+        clientName,
+        salonName: salon.name,
+        serviceName: booking.service.name,
+        stylistName: updated.stylist.name,
+        startTime: booking.startTime,
+      });
+      void sendSMS(phone, smsBody).then((result) =>
+        logSms({
+          direction: 'OUTBOUND',
+          phone,
+          body: smsBody,
+          status: result.success ? 'sent' : 'failed',
+          twilioSid: result.sid,
+          bookingId: booking.id,
+          clientId: booking.clientId ?? undefined,
+          salonId: salon.id,
+        })
+      );
+    }
+
+    reassigned++;
+  }
+
+  revalidatePath('/bookings');
+  return { success: true, reassigned, failed };
+}
+
+export async function getSuggestedSlotsAction(
+  serviceId: string,
+  stylistId: string | undefined,
+  startDate: string,
+  endDate: string,
+  limit?: number
+): Promise<
+  {
+    start: string;
+    end: string;
+    stylistId: string;
+    stylistName: string;
+    score: number;
+    reason: string;
+  }[]
+> {
+  const salon = await getAuthenticatedSalon();
+
+  const suggestions = await getSuggestedSlotsLib(
+    salon.id,
+    serviceId,
+    stylistId,
+    new Date(startDate),
+    new Date(endDate),
+    limit
+  );
+
+  return suggestions.map((s) => ({
+    start: s.start.toISOString(),
+    end: s.end.toISOString(),
+    stylistId: s.stylistId,
+    stylistName: s.stylistName,
+    score: s.score,
+    reason: s.reason,
   }));
 }

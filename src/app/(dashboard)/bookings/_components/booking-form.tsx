@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition, useEffect, useCallback } from 'react';
+import { useState, useMemo, useTransition, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
 import { Button } from '@/components/ui/button';
@@ -10,7 +10,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { Calendar } from '@/components/ui/calendar';
 import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { createBooking, getAvailableSlotsAction } from '@/server/actions/bookings';
+import {
+  createBooking,
+  getAvailableSlotsAction,
+  getSuggestedSlotsAction,
+} from '@/server/actions/bookings';
 import { searchClients } from '@/server/actions/clients';
 import { formatPrice, formatDuration } from '@/lib/utils';
 
@@ -62,22 +66,54 @@ export function BookingForm({
   // Loaded data
   const [slots, setSlots] = useState<SlotOption[]>([]);
   const [loadingSlots, setLoadingSlots] = useState(false);
+  const [suggestions, setSuggestions] = useState<
+    { start: string; end: string; stylistName: string; reason: string }[]
+  >([]);
   const [clients, setClients] = useState<ClientOption[]>([]);
   const [clientQuery, setClientQuery] = useState('');
   const [searchingClients, setSearchingClients] = useState(false);
 
   const selectedService = services.find((s) => s.id === serviceId);
-  const availableStylists = stylistsByService[serviceId] ?? [];
+  const availableStylists = useMemo(
+    () => stylistsByService[serviceId] ?? [],
+    [stylistsByService, serviceId]
+  );
 
   // Fetch slots when stylist + date selected
   useEffect(() => {
     if (!stylistId || !serviceId || !date) return;
     setLoadingSlots(true);
     setSlotStart('');
-    getAvailableSlotsAction(stylistId, serviceId, date.toISOString())
+    getAvailableSlotsAction(
+      stylistId === 'auto' ? (availableStylists[0]?.id ?? '') : stylistId,
+      serviceId,
+      date.toISOString()
+    )
       .then(setSlots)
       .finally(() => setLoadingSlots(false));
-  }, [stylistId, serviceId, date]);
+
+    // Fetch suggested slots
+    const endDate = new Date(date);
+    endDate.setDate(endDate.getDate() + 1);
+    getSuggestedSlotsAction(
+      serviceId,
+      stylistId === 'auto' ? undefined : stylistId,
+      date.toISOString(),
+      endDate.toISOString(),
+      5
+    )
+      .then((s) =>
+        setSuggestions(
+          s.map((slot) => ({
+            start: slot.start,
+            end: slot.end,
+            stylistName: slot.stylistName,
+            reason: slot.reason,
+          }))
+        )
+      )
+      .catch(() => setSuggestions([]));
+  }, [stylistId, serviceId, date, availableStylists]);
 
   // Client search
   const handleClientSearch = useCallback((query: string) => {
@@ -173,6 +209,15 @@ export function BookingForm({
         <div className="space-y-4">
           <h3 className="text-lg font-semibold">Select a stylist</h3>
           <div className="grid gap-3 sm:grid-cols-2">
+            <Card
+              className={`cursor-pointer transition-colors ${stylistId === 'auto' ? 'border-primary ring-2 ring-primary/20' : 'hover:border-primary/50'}`}
+              onClick={() => setStylistId('auto')}
+            >
+              <CardContent className="p-4">
+                <div className="font-medium">Any available stylist</div>
+                <div className="text-sm text-muted-foreground">Auto-assign the best match</div>
+              </CardContent>
+            </Card>
             {availableStylists.map((s) => (
               <Card
                 key={s.id}
@@ -214,6 +259,25 @@ export function BookingForm({
               {loadingSlots && <p className="text-sm text-muted-foreground">Loading slots…</p>}
               {!loadingSlots && date && slots.length === 0 && (
                 <p className="text-sm text-muted-foreground">No available slots on this date.</p>
+              )}
+              {suggestions.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-primary">Recommended times</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {suggestions.map((s) => (
+                      <Button
+                        key={s.start}
+                        variant={slotStart === s.start ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setSlotStart(s.start)}
+                        className="h-auto flex-col py-1.5"
+                      >
+                        <span>{format(new Date(s.start), 'HH:mm')}</span>
+                        <span className="text-[10px] opacity-70">{s.reason}</span>
+                      </Button>
+                    ))}
+                  </div>
+                </div>
               )}
               <div className="grid grid-cols-3 gap-2">
                 {slots.map((s) => (
@@ -331,7 +395,9 @@ export function BookingForm({
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Stylist</span>
-                <span className="font-medium">{selectedStylist?.name}</span>
+                <span className="font-medium">
+                  {stylistId === 'auto' ? 'Auto-assigned' : selectedStylist?.name}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Date & Time</span>

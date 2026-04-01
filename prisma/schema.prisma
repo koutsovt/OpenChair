@@ -50,9 +50,12 @@ model Salon {
   city        String?
   timezone    String   @default("Australia/Sydney")
   imageUrl    String?
+  theme       Json?
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  apiKey  String?  @unique
 
   ownerId String @unique
   owner   User   @relation("SalonOwner", fields: [ownerId], references: [id], onDelete: Cascade)
@@ -60,8 +63,11 @@ model Salon {
   stylists   Stylist[]
   services   Service[]
   categories ServiceCategory[]
-  clients    Client[]
-  bookings   Booking[]
+  clients           Client[]
+  bookings          Booking[]
+  recurringBookings RecurringBooking[]
+  waitlistEntries   WaitlistEntry[]
+  smsLogs           SmsLog[]
 
   @@index([slug])
   @@map("salons")
@@ -89,9 +95,11 @@ model Stylist {
   userId String? @unique
   user   User?   @relation("StylistUser", fields: [userId], references: [id])
 
-  availability StylistAvailability[]
-  services     StylistService[]
-  bookings     Booking[]
+  availability      StylistAvailability[]
+  services          StylistService[]
+  bookings          Booking[]
+  recurringBookings RecurringBooking[]
+  waitlistEntries   WaitlistEntry[]
 
   @@index([salonId])
   @@map("stylists")
@@ -148,8 +156,10 @@ model Service {
   categoryId String?
   category   ServiceCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
 
-  stylists StylistService[]
-  bookings Booking[]
+  stylists          StylistService[]
+  bookings          Booking[]
+  recurringBookings RecurringBooking[]
+  waitlistEntries   WaitlistEntry[]
 
   @@index([salonId])
   @@index([categoryId])
@@ -187,6 +197,9 @@ model Client {
   salonId  String
   salon    Salon     @relation(fields: [salonId], references: [id], onDelete: Cascade)
   bookings Booking[]
+  recurringBookings RecurringBooking[]
+  waitlistEntries   WaitlistEntry[]
+  smsLogs           SmsLog[]
 
   @@index([salonId])
   @@index([phone])
@@ -220,10 +233,15 @@ model Booking {
   salonId String
   salon   Salon  @relation(fields: [salonId], references: [id], onDelete: Cascade)
 
+  recurringBookingId String?
+  recurringBooking   RecurringBooking? @relation(fields: [recurringBookingId], references: [id])
+
   cancelledAt  DateTime?
   cancelReason String?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
+
+  smsLogs SmsLog[]
 
   @@index([salonId, startTime])
   @@index([stylistId, startTime])
@@ -239,4 +257,102 @@ enum BookingStatus {
   COMPLETED
   CANCELLED
   NO_SHOW
+}
+
+// ============================================================
+// RECURRING BOOKINGS
+// ============================================================
+
+model RecurringBooking {
+  id            String   @id @default(cuid())
+  intervalWeeks Int
+  dayOfWeek     Int      // preferred day 0-6
+  preferredTime String   // "10:00"
+  isActive      Boolean  @default(true)
+  nextRunDate   DateTime
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  clientId  String
+  client    Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  serviceId String
+  service   Service @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  stylistId String
+  stylist   Stylist @relation(fields: [stylistId], references: [id], onDelete: Restrict)
+  salonId   String
+  salon     Salon   @relation(fields: [salonId], references: [id], onDelete: Cascade)
+
+  bookings Booking[]
+
+  @@index([salonId, nextRunDate])
+  @@index([clientId])
+  @@map("recurring_bookings")
+}
+
+// ============================================================
+// WAITLIST
+// ============================================================
+
+model WaitlistEntry {
+  id                 String         @id @default(cuid())
+  status             WaitlistStatus @default(WAITING)
+  preferredDateStart DateTime
+  preferredDateEnd   DateTime
+  preferredTimeStart String?        // "09:00"
+  preferredTimeEnd   String?        // "17:00"
+  notifiedAt         DateTime?
+  expiresAt          DateTime
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  serviceId String
+  service   Service  @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  stylistId String?
+  stylist   Stylist? @relation(fields: [stylistId], references: [id], onDelete: SetNull)
+  salonId   String
+  salon     Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
+
+  @@index([salonId, status])
+  @@index([clientId])
+  @@map("waitlist_entries")
+}
+
+enum WaitlistStatus {
+  WAITING
+  NOTIFIED
+  BOOKED
+  EXPIRED
+  CANCELLED
+}
+
+// ============================================================
+// SMS LOG (audit trail)
+// ============================================================
+
+model SmsLog {
+  id        String       @id @default(cuid())
+  direction SmsDirection
+  phone     String
+  body      String
+  status    String       // "sent", "delivered", "failed", "received"
+  twilioSid String?
+  bookingId String?
+  booking   Booking?     @relation(fields: [bookingId], references: [id])
+  clientId  String?
+  client    Client?      @relation(fields: [clientId], references: [id])
+  salonId   String
+  salon     Salon        @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  createdAt DateTime     @default(now())
+
+  @@index([salonId, createdAt])
+  @@index([phone])
+  @@index([bookingId])
+  @@map("sms_logs")
+}
+
+enum SmsDirection {
+  INBOUND
+  OUTBOUND
 }

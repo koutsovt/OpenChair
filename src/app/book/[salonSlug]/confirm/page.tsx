@@ -21,7 +21,7 @@ export default async function ConfirmPage({ params, searchParams }: PageProps) {
     notFound();
   }
 
-  const salon = await prisma.salon.findUnique({
+  const salon = await prisma.salon.findFirst({
     where: { slug: salonSlug, isActive: true },
   });
 

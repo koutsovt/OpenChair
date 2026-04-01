@@ -117,6 +117,20 @@ export function ServicePicker({ salonSlug, groupedServices, stylists }: ServiceP
             <p className="text-sm text-muted-foreground">No stylists available for this service.</p>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2">
+              <Card
+                className="cursor-pointer transition-colors hover:border-gray-300"
+                onClick={() => handleStylistClick('auto')}
+              >
+                <CardContent className="flex items-center gap-4 p-4">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary/10">
+                    <UserIcon className="h-5 w-5 text-primary" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-medium">Any available stylist</p>
+                    <p className="text-sm text-muted-foreground">We&apos;ll find the best match</p>
+                  </div>
+                </CardContent>
+              </Card>
               {availableStylists.map((stylist) => (
                 <Card
                   key={stylist.id}

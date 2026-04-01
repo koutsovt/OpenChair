@@ -68,11 +68,19 @@ export default async function BookingsPage({
     stylistsByService[ss.serviceId].push({ id: ss.stylist.id, name: ss.stylist.name });
   }
 
-  // All active stylists for timeline
+  // All active stylists for timeline (include availability)
+  const dayOfWeek = targetDate.getDay(); // 0=Sunday..6=Saturday
   const stylists = await prisma.stylist.findMany({
     where: { salonId: salon.id, isActive: true },
     orderBy: { sortOrder: 'asc' },
-    select: { id: true, name: true },
+    select: {
+      id: true,
+      name: true,
+      availability: {
+        where: { dayOfWeek, isActive: true },
+        select: { startTime: true, endTime: true },
+      },
+    },
   });
 
   const bookingRows = bookings.map((b) => ({
@@ -84,7 +92,10 @@ export default async function BookingsPage({
     serviceName: b.service.name,
     stylistName: b.stylist.name,
     stylistId: b.stylistId,
+    serviceId: b.serviceId,
+    serviceDuration: b.service.duration,
     price: b.price,
+    isRecurring: b.recurringBookingId != null,
   }));
 
   const serviceOptions = services.map((s) => ({
@@ -123,7 +134,7 @@ export default async function BookingsPage({
       ) : view === 'list' ? (
         <BookingList bookings={bookingRows} />
       ) : (
-        <BookingTimeline bookings={bookingRows} stylists={stylists} />
+        <BookingTimeline bookings={bookingRows} stylists={stylists} date={dateStr} />
       )}
     </div>
   );

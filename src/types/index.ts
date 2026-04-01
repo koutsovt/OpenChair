@@ -5,8 +5,11 @@ import type {
   StylistModel,
   StylistAvailabilityModel,
   SalonModel,
+  RecurringBookingModel,
+  WaitlistEntryModel,
+  SmsLogModel,
 } from '@/generated/prisma/models';
-import type { BookingStatus } from '@/generated/prisma/enums';
+import type { BookingStatus, WaitlistStatus, SmsDirection } from '@/generated/prisma/enums';
 
 // Re-export Prisma types with short aliases for convenience
 export type Booking = BookingModel;
@@ -15,7 +18,10 @@ export type Service = ServiceModel;
 export type Stylist = StylistModel;
 export type StylistAvailability = StylistAvailabilityModel;
 export type Salon = SalonModel;
-export type { BookingStatus };
+export type RecurringBooking = RecurringBookingModel;
+export type WaitlistEntry = WaitlistEntryModel;
+export type SmsLog = SmsLogModel;
+export type { BookingStatus, WaitlistStatus, SmsDirection };
 
 // Composite types for common queries
 export type StylistWithAvailability = Stylist & {
@@ -60,4 +66,22 @@ export type ClientFormData = {
   notes?: string;
   birthDate?: Date;
   source?: string;
+};
+
+// Auto-assign result
+export type AutoAssignResult = {
+  stylistId: string;
+  stylistName: string;
+  score: number;
+  reason: string;
+};
+
+// Smart suggestions
+export type SuggestedSlot = {
+  start: Date;
+  end: Date;
+  stylistId: string;
+  stylistName: string;
+  score: number;
+  reason: string;
 };

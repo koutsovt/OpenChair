@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { LogOut, Menu } from 'lucide-react';
 import { signOut } from '@/server/actions/auth';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -19,9 +20,10 @@ interface HeaderProps {
   salonName: string;
   userInitials: string;
   userEmail: string;
+  logoUrl?: string;
 }
 
-export function Header({ salonName, userInitials, userEmail }: HeaderProps) {
+export function Header({ salonName, userInitials, userEmail, logoUrl }: HeaderProps) {
   return (
     <header className="flex h-14 items-center gap-4 border-b bg-background px-4 lg:px-6">
       <Sheet>
@@ -37,7 +39,16 @@ export function Header({ salonName, userInitials, userEmail }: HeaderProps) {
         </SheetContent>
       </Sheet>
 
-      <div className="flex-1">
+      <div className="flex flex-1 items-center gap-2">
+        {logoUrl && (
+          <Image
+            src={logoUrl}
+            alt={salonName}
+            width={32}
+            height={32}
+            className="rounded object-cover"
+          />
+        )}
         <h2 className="text-sm font-semibold">{salonName}</h2>
       </div>
 

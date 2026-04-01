@@ -73,7 +73,12 @@ export function SlotPicker({ salonSlug, stylistId, serviceId, availableDays }: S
       {isPending && <p className="text-sm text-muted-foreground">Loading available times…</p>}
 
       {selectedDate && !isPending && slots.length === 0 && (
-        <p className="text-sm text-muted-foreground">No available slots on this date.</p>
+        <div className="space-y-2">
+          <p className="text-sm text-muted-foreground">No available slots on this date.</p>
+          <p className="text-sm text-muted-foreground">
+            Want to be notified if a slot opens up? Contact the salon to join the waitlist.
+          </p>
+        </div>
       )}
 
       {slots.length > 0 && (

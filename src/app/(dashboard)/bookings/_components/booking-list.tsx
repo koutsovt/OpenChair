@@ -13,6 +13,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { BOOKING_STATUS_LABELS, BOOKING_STATUS_COLORS } from '@/lib/constants';
 import { formatPrice } from '@/lib/utils';
+import { Repeat } from 'lucide-react';
 import { BookingActions } from './booking-actions';
 import type { BookingStatus } from '@/types';
 
@@ -24,7 +25,11 @@ type BookingRow = {
   clientName: string;
   serviceName: string;
   stylistName: string;
+  stylistId: string;
+  serviceId: string;
+  serviceDuration: number;
   price: number | null;
+  isRecurring?: boolean;
 };
 
 export function BookingList({ bookings }: { bookings: BookingRow[] }) {
@@ -53,7 +58,12 @@ export function BookingList({ bookings }: { bookings: BookingRow[] }) {
                 {format(new Date(b.startTime), 'HH:mm')}–{format(new Date(b.endTime), 'HH:mm')}
               </Link>
             </TableCell>
-            <TableCell>{b.clientName}</TableCell>
+            <TableCell>
+              <span className="flex items-center gap-1">
+                {b.clientName}
+                {b.isRecurring && <Repeat className="h-3 w-3 text-muted-foreground" />}
+              </span>
+            </TableCell>
             <TableCell>{b.serviceName}</TableCell>
             <TableCell>{b.stylistName}</TableCell>
             <TableCell>{b.price != null ? formatPrice(b.price) : '—'}</TableCell>
@@ -63,7 +73,14 @@ export function BookingList({ bookings }: { bookings: BookingRow[] }) {
               </Badge>
             </TableCell>
             <TableCell>
-              <BookingActions bookingId={b.id} currentStatus={b.status} />
+              <BookingActions
+                bookingId={b.id}
+                currentStatus={b.status}
+                serviceId={b.serviceId}
+                serviceDuration={b.serviceDuration}
+                stylistId={b.stylistId}
+                startTime={b.startTime}
+              />
             </TableCell>
           </TableRow>
         ))}

@@ -9,7 +9,7 @@ interface PageProps {
 export default async function BookSalonPage({ params }: PageProps) {
   const { salonSlug } = await params;
 
-  const salon = await prisma.salon.findUnique({
+  const salon = await prisma.salon.findFirst({
     where: { slug: salonSlug, isActive: true },
     include: {
       services: {

@@ -29,7 +29,7 @@ import { cn } from '@/lib/utils';
 
 const clientFormSchema = z.object({
   name: z.string().min(1, 'Name is required'),
-  phone: z.string().optional().or(z.literal('')),
+  phone: z.string().min(1, 'Phone number is required'),
   email: z.string().email().optional().or(z.literal('')),
   notes: z.string().optional().or(z.literal('')),
   birthDate: z.date().optional(),
@@ -75,7 +75,7 @@ export function ClientForm({ defaultValues, onSubmit, submitLabel = 'Save' }: Cl
   async function handleSubmit(values: ClientFormValues) {
     const formData = new FormData();
     formData.set('name', values.name);
-    formData.set('phone', values.phone ?? '');
+    formData.set('phone', values.phone);
     formData.set('email', values.email ?? '');
     formData.set('notes', values.notes ?? '');
     formData.set('birthDate', values.birthDate ? values.birthDate.toISOString() : '');
@@ -109,7 +109,7 @@ export function ClientForm({ defaultValues, onSubmit, submitLabel = 'Save' }: Cl
             name="phone"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Phone</FormLabel>
+                <FormLabel>Phone *</FormLabel>
                 <FormControl>
                   <Input placeholder="0400 000 000" {...field} />
                 </FormControl>

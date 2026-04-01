@@ -1,5 +1,6 @@
 import twilio from 'twilio';
 import { env } from '@/lib/env';
+import { prisma } from '@/lib/prisma';
 
 function isDevMode(): boolean {
   return (
@@ -14,24 +15,57 @@ const getTwilioClient = () => twilio(env.TWILIO_ACCOUNT_SID, env.TWILIO_AUTH_TOK
 export async function sendSMS(
   to: string,
   body: string
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; sid?: string; error?: string }> {
   if (isDevMode()) {
     // eslint-disable-next-line no-console
     console.info(`[SMS-DEV] To: ${to}\n${body}`);
-    return { success: true };
+    return { success: true, sid: `dev_${Date.now()}` };
   }
 
   try {
-    await getTwilioClient().messages.create({
+    const message = await getTwilioClient().messages.create({
       body,
       from: env.TWILIO_PHONE_NUMBER,
       to,
     });
-    return { success: true };
+    return { success: true, sid: message.sid };
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to send SMS';
+    const msg = error instanceof Error ? error.message : 'Failed to send SMS';
     // eslint-disable-next-line no-console
-    console.error('Twilio SMS error:', message);
-    return { success: false, error: message };
+    console.error('Twilio SMS error:', msg);
+    return { success: false, error: msg };
   }
+}
+
+export function validateTwilioSignature(
+  url: string,
+  params: Record<string, string>,
+  signature: string
+): boolean {
+  if (isDevMode()) return true;
+  return twilio.validateRequest(env.TWILIO_AUTH_TOKEN, signature, url, params);
+}
+
+export async function logSms(data: {
+  direction: 'INBOUND' | 'OUTBOUND';
+  phone: string;
+  body: string;
+  status: string;
+  twilioSid?: string;
+  bookingId?: string;
+  clientId?: string;
+  salonId: string;
+}) {
+  return prisma.smsLog.create({
+    data: {
+      direction: data.direction,
+      phone: data.phone,
+      body: data.body,
+      status: data.status,
+      twilioSid: data.twilioSid ?? null,
+      bookingId: data.bookingId ?? null,
+      clientId: data.clientId ?? null,
+      salonId: data.salonId,
+    },
+  });
 }

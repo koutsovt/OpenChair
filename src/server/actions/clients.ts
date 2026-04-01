@@ -2,38 +2,21 @@
 
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { prisma } from '@/lib/prisma';
+import { getAuthenticatedSalon } from '@/server/auth';
 
 const clientSchema = z.object({
   name: z.string().min(1, 'Name is required'),
-  phone: z.string().optional().or(z.literal('')),
+  phone: z.string().min(1, 'Phone number is required'),
   email: z.string().email().optional().or(z.literal('')),
   notes: z.string().optional().or(z.literal('')),
   birthDate: z.string().optional().or(z.literal('')),
   source: z.string().optional().or(z.literal('')),
 });
 
-async function getAuthenticatedSalon() {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
-
-  if (!authUser) {
-    throw new Error('Not authenticated');
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { supabaseId: authUser.id },
-    include: { salon: true },
-  });
-
-  if (!user?.salon) {
-    throw new Error('No salon found');
-  }
-
-  return user.salon;
+/** Strip non-digit characters for loose duplicate matching (handles spaces, dashes, parentheses) */
+function normalisePhone(phone: string): string {
+  return phone.replace(/\D/g, '');
 }
 
 export async function createClient(formData: FormData) {
@@ -53,6 +36,19 @@ export async function createClient(formData: FormData) {
   }
 
   const { name, phone, email, notes, birthDate, source } = parsed.data;
+
+  // Duplicate check — look for an active client in this salon with the same phone digits
+  const normalisedPhone = normalisePhone(phone);
+  const existingClients = await prisma.client.findMany({
+    where: { salonId: salon.id, isActive: true, phone: { not: null } },
+    select: { id: true, name: true, phone: true },
+  });
+  const duplicate = existingClients.find(
+    (c) => c.phone && normalisePhone(c.phone) === normalisedPhone
+  );
+  if (duplicate) {
+    return { error: `A client with this phone number already exists: ${duplicate.name}` };
+  }
 
   await prisma.client.create({
     data: {

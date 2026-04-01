@@ -1,271 +1,367 @@
-# RESEARCH: OpenChair — AI-Native Salon OS
+# RESEARCH: OpenChair — Open-Source AI-Native Salon Operating System
 
 Generated: 2026-03-31
-Stack: Next.js 14 (App Router) + TypeScript + Supabase + Prisma
+Stack: Next.js 14 (App Router) + TypeScript 5 + Supabase (Postgres) + Prisma 7
 
-## Current State
+---
 
-- **Zero code** — planning docs only (CLAUDE.md, CONFIG_REFERENCE.md, FRAMEWORK_DECISION.md, docs/verified-libraries.md)
-- No package.json, no git repo, no config files, no `node_modules`
-- All architecture decisions documented but nothing scaffolded
+## CURRENT STATE
 
-## Stack Verdict
+Phase 1 is **complete and running**: 11 Prisma models, 12+ API endpoints, 8 server actions, 53 unit tests, full public REST API (v1), SMS webhook with inbound forwarding, rate limiting, and audit logging.
 
-**Next.js 14+ (App Router) + Supabase + Prisma** — confirmed best choice.
+Phase 2 is planned: colour formula builder, virtual hairstyle try-on (HairFastGAN), WhatsApp booking, revenue dashboard, Stripe billing.
 
-- 17x npm downloads vs SvelteKit, flagship Supabase integration, primary AI SDK target
-- Cal.com (open-source booking SaaS) validates this exact stack in production
-- Real salon booking courses/repos exist only for Next.js + Supabase
-- Remix lacks AI SDK support; SvelteKit has smaller ecosystem + flawed Supabase docs
+---
+
+## STACK VERDICT: KEEP — UPGRADE NEXT.JS 14 → 15 WHEN READY
+
+| Alternative              | Verdict    | Reason                                                                     |
+| ------------------------ | ---------- | -------------------------------------------------------------------------- |
+| Remix / React Router v7  | ❌ REJECT  | Massive migration cost, different data-loading patterns, smaller ecosystem |
+| SvelteKit + Drizzle      | ❌ REJECT  | Complete rewrite, no native shadcn/ui, 3x smaller ecosystem                |
+| Next.js 15 (upgrade)     | ✅ UPGRADE | Low-effort (~1-2 days), gains Turbopack 10x HMR, PPR, React 19             |
+| Drizzle (replace Prisma) | ❌ REJECT  | Prisma 7 removed Rust engine (3x faster), migration would touch every file |
+
+---
 
 ## INSTALL
 
 ```bash
-# Init project
-pnpm create next-app@14 . --typescript --tailwind --eslint --app --src-dir --import-alias "@/*" --use-pnpm
+# Phase 2 dependencies (add when each feature starts)
+pnpm add stripe@21.0.1 replicate@1.4.0 recharts@3.8.1 \
+  @upstash/ratelimit@2.0.8 @upstash/redis \
+  inngest@4.1.0 uploadthing@7.7.4 @uploadthing/react \
+  @react-email/components@1.0.10 sharp pino cmdk
 
-# Core dependencies
-pnpm add @supabase/supabase-js@2.101.0 @supabase/ssr@0.10.0 \
-  twilio@5.13.1 resend@6.10.0 \
-  date-fns@4.1.0 react-day-picker@9.14.0 \
-  react-hook-form@7.72.0 zod@4.3.6 @hookform/resolvers@5.2.2 \
-  @t3-oss/env-nextjs@0.13.11 \
-  lucide-react sonner @tanstack/react-table
-
-# Dev dependencies
-pnpm add -D prisma@7.6.0 @prisma/client@7.6.0 \
-  vitest @vitejs/plugin-react vite-tsconfig-paths jsdom \
-  @testing-library/react @testing-library/dom @testing-library/jest-dom \
-  @playwright/test \
-  prettier eslint-config-prettier prettier-plugin-tailwindcss \
-  husky lint-staged @commitlint/cli @commitlint/config-conventional \
-  tailwindcss-animate
-
-# shadcn/ui (copies components, not an npm dep)
-pnpm dlx shadcn@latest init
-
-# Prisma init
-pnpm dlx prisma init
+# Dev tooling improvement
+pnpm add -D @next/bundle-analyzer@14.2.35
 ```
 
-## DEPENDENCIES
+---
 
-| Package                 | Version   | Purpose                      |
-| ----------------------- | --------- | ---------------------------- |
-| `@supabase/supabase-js` | `2.101.0` | Supabase client SDK          |
-| `@supabase/ssr`         | `0.10.0`  | SSR-compatible Supabase auth |
-| `twilio`                | `5.13.1`  | SMS sending via Twilio       |
-| `resend`                | `6.10.0`  | Transactional email sending  |
-| `date-fns`              | `4.1.0`   | Date/time utilities          |
-| `react-day-picker`      | `9.14.0`  | Calendar date picker UI      |
-| `react-hook-form`       | `7.72.0`  | Performant form management   |
-| `zod`                   | `4.3.6`   | Schema validation            |
-| `@hookform/resolvers`   | `5.2.2`   | Zod ↔ react-hook-form bridge |
-| `@t3-oss/env-nextjs`    | `0.13.11` | Type-safe env var validation |
-| `lucide-react`          | latest    | Icon library                 |
-| `sonner`                | latest    | Toast notifications          |
-| `@tanstack/react-table` | latest    | Data table for client lists  |
+## DEPENDENCIES (installed — verified at latest)
 
-### Phase 2 (not installed yet)
+| Package                    | Version   | Purpose                      |
+| -------------------------- | --------- | ---------------------------- |
+| `next`                     | `14.2.35` | React framework (App Router) |
+| `react` / `react-dom`      | `^18`     | UI library                   |
+| `@supabase/supabase-js`    | `2.101.0` | Auth + Supabase client       |
+| `@supabase/ssr`            | `0.10.0`  | SSR auth helpers             |
+| `twilio`                   | `5.13.1`  | SMS + WhatsApp messaging     |
+| `resend`                   | `6.10.0`  | Transactional email          |
+| `zod`                      | `4.3.6`   | Schema validation            |
+| `date-fns`                 | `4.1.0`   | Date utilities               |
+| `@date-fns/tz`             | `^1.4.1`  | Timezone support             |
+| `@t3-oss/env-nextjs`       | `0.13.11` | Typed env validation         |
+| `react-hook-form`          | `7.72.0`  | Form state management        |
+| `@hookform/resolvers`      | `5.2.2`   | Zod↔RHF bridge               |
+| `@tanstack/react-table`    | `^8.21.3` | Data tables                  |
+| `sonner`                   | `^2.0.7`  | Toast notifications          |
+| `lucide-react`             | `^1.7.0`  | Icon library                 |
+| `react-day-picker`         | `9.14.0`  | Calendar picker              |
+| `@radix-ui/*` (11 pkgs)    | various   | Accessible UI primitives     |
+| `class-variance-authority` | `^0.7.1`  | Component variants           |
+| `clsx`                     | `^2.1.1`  | Conditional classnames       |
+| `tailwind-merge`           | `^3.5.0`  | Tailwind class dedup         |
 
-| Package                  | Version  | Purpose                   |
-| ------------------------ | -------- | ------------------------- |
-| `stripe`                 | `21.0.1` | Payment processing        |
-| `replicate`              | `1.4.0`  | AI model execution        |
-| `@great-detail/whatsapp` | `8.4.0`  | WhatsApp Cloud API client |
-| `uploadthing`            | `7.7.4`  | File/image uploads        |
-| `zustand`                | `5.0.12` | Client state management   |
+## DEPENDENCIES TO ADD (Phase 2)
 
-## DEV DEPENDENCIES
+| Package                   | Version   | Purpose                   |
+| ------------------------- | --------- | ------------------------- |
+| `stripe`                  | `21.0.1`  | Payment processing        |
+| `@anthropic-ai/sdk`       | `0.80.0`  | AI assistant features     |
+| `replicate`               | `1.4.0`   | HairFastGAN image gen     |
+| `recharts`                | `3.8.1`   | Revenue dashboard charts  |
+| `@upstash/ratelimit`      | `2.0.8`   | Production rate limiting  |
+| `@upstash/redis`          | `^1.34.3` | Redis for rate limiter    |
+| `inngest`                 | `4.1.0`   | Background jobs / cron    |
+| `uploadthing`             | `7.7.4`   | Image uploads             |
+| `@uploadthing/react`      | `^7.3.3`  | Upload React components   |
+| `@react-email/components` | `1.0.10`  | JSX email templates       |
+| `sharp`                   | `^0.34.5` | Image resize/optimization |
+| `cmdk`                    | `^1.1.1`  | Command palette search    |
+| `pino`                    | `^9.6.0`  | Structured JSON logging   |
 
-| Package                           | Version | Purpose                         |
-| --------------------------------- | ------- | ------------------------------- |
-| `prisma`                          | `7.6.0` | Prisma CLI + migrations         |
-| `@prisma/client`                  | `7.6.0` | Prisma query client             |
-| `vitest`                          | latest  | Unit test framework             |
-| `@vitejs/plugin-react`            | latest  | Vitest React support            |
-| `vite-tsconfig-paths`             | latest  | Resolve `@/` in tests           |
-| `jsdom`                           | latest  | DOM env for tests               |
-| `@testing-library/react`          | latest  | Component testing               |
-| `@testing-library/dom`            | latest  | DOM testing utilities           |
-| `@testing-library/jest-dom`       | latest  | DOM assertion matchers          |
-| `@playwright/test`                | latest  | E2E testing                     |
-| `prettier`                        | latest  | Code formatter                  |
-| `eslint-config-prettier`          | latest  | Disable ESLint formatting rules |
-| `prettier-plugin-tailwindcss`     | latest  | Auto-sort Tailwind classes      |
-| `husky`                           | `9.1.7` | Git hooks                       |
-| `lint-staged`                     | latest  | Run linters on staged files     |
-| `@commitlint/cli`                 | latest  | Enforce commit conventions      |
-| `@commitlint/config-conventional` | latest  | Conventional commit rules       |
-| `tailwindcss-animate`             | latest  | Animation plugin for shadcn     |
+## DEV DEPENDENCIES (installed — verified at latest)
 
-## CONFIG FILES TO CREATE
+| Package                       | Version   | Purpose             |
+| ----------------------------- | --------- | ------------------- |
+| `prisma` / `@prisma/client`   | `^7.6.0`  | ORM CLI + client    |
+| `typescript`                  | `^5`      | Type checking       |
+| `eslint`                      | `^8`      | Linting             |
+| `eslint-config-next`          | `14.2.35` | Next.js lint rules  |
+| `prettier`                    | `^3.8.1`  | Code formatting     |
+| `prettier-plugin-tailwindcss` | `^0.7.2`  | TW class sorting    |
+| `vitest`                      | `^4.1.2`  | Unit test runner    |
+| `@playwright/test`            | `^1.58.2` | E2E testing         |
+| `@testing-library/react`      | `^16.3.2` | Component testing   |
+| `@testing-library/dom`        | `^10.4.1` | DOM test utils      |
+| `@testing-library/jest-dom`   | `^6.9.1`  | DOM matchers        |
+| `husky`                       | `^9.1.7`  | Git hooks           |
+| `lint-staged`                 | `^16.4.0` | Pre-commit linting  |
+| `@commitlint/cli`             | `^20.5.0` | Commit message lint |
+| `tailwindcss`                 | `^3.4.1`  | CSS framework       |
+| `postcss`                     | `^8`      | CSS processing      |
+| `tsx`                         | `^4.21.0` | TS script runner    |
 
-### `next.config.mjs`
+## DEV DEPENDENCIES TO ADD
+
+| Package                 | Version   | Purpose              |
+| ----------------------- | --------- | -------------------- |
+| `@next/bundle-analyzer` | `14.2.35` | Bundle size analysis |
+
+---
+
+## CONFIG FILES — KEY CHANGES NEEDED
+
+### `tsconfig.json` — Add stricter checks
+
+```json
+"noUncheckedIndexedAccess": true,
+"noFallthroughCasesInSwitch": true,
+"forceConsistentCasingInFileNames": true
+```
+
+### `next.config.mjs` — Add security headers + Prisma external packages
 
 ```js
-/** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: true,
-  images: {
-    remotePatterns: [{ protocol: 'https', hostname: '**.supabase.co' }],
-  },
+  serverExternalPackages: ['@prisma/client'],
+  headers: async () => [
+    {
+      source: '/(.*)',
+      headers: [
+        { key: 'X-Frame-Options', value: 'DENY' },
+        { key: 'X-Content-Type-Options', value: 'nosniff' },
+        { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+      ],
+    },
+  ],
 };
 export default nextConfig;
 ```
 
-### `tsconfig.json`
-
-Key: `strict: true`, `moduleResolution: "bundler"`, paths `@/*` → `./src/*`, next plugin
-
-### `.eslintrc.json`
+### `package.json` — Add scripts
 
 ```json
-{
-  "extends": ["next/core-web-vitals", "next/typescript", "prettier"],
-  "rules": {
-    "@typescript-eslint/no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }],
-    "no-console": ["warn", { "allow": ["warn", "error"] }]
-  }
-}
+"dev:turbo": "next dev --turbo",
+"analyze": "ANALYZE=true next build"
 ```
 
-### `.prettierrc`
+### Do NOT upgrade (yet)
 
-```json
-{
-  "semi": true,
-  "singleQuote": true,
-  "tabWidth": 2,
-  "trailingComma": "es5",
-  "printWidth": 100,
-  "plugins": ["prettier-plugin-tailwindcss"],
-  "tailwindFunctions": ["cn", "cva"]
-}
+- ESLint 9 flat config — wait for Next.js 15
+- Tailwind v4 — wait for Next.js 15 + shadcn migration tooling
+- Biome — doesn't support `next/core-web-vitals` or `react-hooks/exhaustive-deps`
+
+---
+
+## CONFIG FILES TO CREATE
+
+### `.github/workflows/ci.yml`
+
+```yaml
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        check: [lint, typecheck, test]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: npx prisma generate
+        env: { SKIP_ENV_VALIDATION: 'true' }
+      - if: matrix.check == 'lint'
+        run: pnpm lint
+      - if: matrix.check == 'typecheck'
+        run: pnpm tsc --noEmit
+      - if: matrix.check == 'test'
+        run: pnpm vitest run
+        env: { SKIP_ENV_VALIDATION: 'true' }
+
+  build:
+    needs: quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: npx prisma generate
+      - run: pnpm build
+        env:
+          SKIP_ENV_VALIDATION: 'true'
+          NEXT_PUBLIC_APP_URL: 'http://localhost:3000'
+          NEXT_PUBLIC_SUPABASE_URL: 'http://localhost:54321'
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: 'fake'
 ```
 
-### `vitest.config.ts`
+---
 
-Plugins: `tsconfigPaths()`, `react()`. Environment: `jsdom`. Include: `src/**/*.{test,spec}.{ts,tsx}`
-
-### `components.json` (shadcn/ui)
-
-Style: `new-york`, rsc: `true`, baseColor: `neutral`, cssVariables: `true`, icon library: `lucide`
-
-### `prisma/schema.prisma`
-
-Provider: `postgresql`, `directUrl` for Supabase pooling, `@@map` to snake_case tables
-
-## PROJECT STRUCTURE
+## PROJECT STRUCTURE — RECOMMENDED EVOLUTION
 
 ```
 src/
-├── app/
-│   ├── (auth)/
-│   │   ├── layout.tsx
-│   │   ├── sign-in/page.tsx
-│   │   └── sign-up/page.tsx
-│   ├── (dashboard)/
-│   │   ├── layout.tsx                    # sidebar + header shell
-│   │   ├── dashboard/page.tsx            # overview/stats
+├── app/                          # Routes — thin pages, no business logic
+│   ├── (auth)/                   # sign-in, sign-up
+│   ├── (dashboard)/              # authenticated routes
 │   │   ├── bookings/
-│   │   │   ├── page.tsx                  # booking list + calendar view
-│   │   │   ├── [id]/page.tsx             # booking detail
-│   │   │   └── _components/
 │   │   ├── clients/
-│   │   │   ├── page.tsx                  # client list (CRM)
-│   │   │   ├── [id]/page.tsx             # client card/detail
-│   │   │   └── _components/
+│   │   ├── dashboard/
 │   │   ├── services/
-│   │   │   └── page.tsx                  # manage services
-│   │   ├── team/
-│   │   │   ├── page.tsx                  # stylist list
-│   │   │   ├── [id]/page.tsx             # stylist detail + schedule
-│   │   │   └── _components/
-│   │   └── settings/
-│   │       └── page.tsx
-│   ├── book/
-│   │   └── [salonSlug]/
-│   │       ├── page.tsx                  # public: pick service + stylist
-│   │       ├── [stylistId]/page.tsx      # public: pick date + time
-│   │       └── confirm/page.tsx          # public: enter details + confirm
+│   │   ├── settings/             # ← ADD: salon settings, API keys, billing
+│   │   └── team/
 │   ├── api/
-│   │   ├── bookings/route.ts
-│   │   ├── slots/route.ts
-│   │   └── webhooks/
-│   ├── layout.tsx
-│   ├── page.tsx                          # landing page
-│   └── globals.css
+│   │   ├── cron/                 # scheduled jobs
+│   │   └── v1/                   # public REST API
+│   └── book/[salonSlug]/         # public booking flow
+│
 ├── components/
-│   ├── ui/                               # shadcn primitives
-│   ├── layout/                           # sidebar, header
-│   └── shared/                           # data-table, status-badge
-├── lib/
-│   ├── prisma.ts                         # singleton client
+│   ├── layout/
+│   └── ui/                       # shadcn primitives
+│
+├── lib/                          # Pure utilities — NO Prisma imports
+│   ├── __tests__/
+│   ├── scheduling/
 │   ├── supabase/
-│   │   ├── client.ts                     # browser client
-│   │   └── server.ts                     # server client
-│   ├── env.ts                            # @t3-oss/env-nextjs validation
-│   ├── slots.ts                          # getAvailableSlots()
-│   ├── booking-validation.ts             # conflict detection
-│   └── utils.ts                          # cn(), formatters
-├── server/
-│   └── actions/
-│       ├── bookings.ts
-│       ├── clients.ts
-│       ├── services.ts
-│       └── availability.ts
-└── types/
-    └── index.ts
-prisma/
-├── schema.prisma
-├── migrations/
-└── seed.ts
+│   ├── validations/              # ← ADD: shared Zod schemas
+│   ├── constants.ts
+│   ├── env.ts
+│   ├── rate-limit.ts
+│   ├── sms-templates.ts
+│   └── utils.ts
+│
+├── server/                       # Server-only — Prisma lives here
+│   ├── actions/                  # Mutations
+│   ├── auth.ts                   # ← ADD: centralized getAuthenticatedSalon()
+│   ├── queries/                  # ← ADD: read-only data access for RSCs
+│   │   ├── bookings.ts
+│   │   ├── clients.ts
+│   │   ├── dashboard.ts
+│   │   ├── services.ts
+│   │   └── team.ts
+│   └── services/                 # ← ADD: shared business logic
+│       ├── booking-service.ts    # Deduplicated booking creation
+│       ├── sms-service.ts        # sendSMS + logSms orchestration
+│       └── audit-log.ts          # Activity logging
+│
+├── types/
+│   └── index.ts
+└── hooks/
+    └── use-toast.ts
 ```
 
-## KEY DOMAIN MODELS (Prisma)
+### Key Principle: `lib/` = pure (no Prisma), `server/` = DB access
 
-Core entities discovered from real salon/booking projects (cal.com, CrazyStack, event.me):
+---
 
-| Model                 | Purpose                                                                   |
-| --------------------- | ------------------------------------------------------------------------- |
-| `Salon`               | Multi-tenant root, has slug for public booking URL                        |
-| `Stylist`             | Service provider, belongs to salon, has weekly availability               |
-| `StylistAvailability` | Recurring weekly schedule (dayOfWeek + startTime/endTime)                 |
-| `Service`             | Offered service with price (cents) + duration (minutes)                   |
-| `ServiceCategory`     | Groups services (Haircuts, Coloring, etc.)                                |
-| `StylistService`      | Junction: which stylists do which services, with price/duration overrides |
-| `Client`              | CRM record — separate from User (clients don't need app accounts)         |
-| `Booking`             | Core entity: client + stylist + service + startTime/endTime + status      |
-| `User`                | Staff logins only (owner, stylist, admin roles)                           |
+## KEY PATTERNS — PRIORITIES
 
-## KEY PATTERNS
+### Must-Fix (Correctness)
 
-1. **Weekly recurring availability** — store `dayOfWeek` + `startTime`/`endTime` per stylist, compute slots dynamically (not pre-generated rows)
-2. **Overlap detection** — `existing.startTime < newEnd AND existing.endTime > newStart` with `@@index([stylistId, startTime])` for performance
-3. **Separate Client from User** — salon clients tracked by phone/name in CRM, no app account needed; User is for staff logins
-4. **Server Actions for mutations** — `/server/actions/` for bookings, clients, services; server components for reads
-5. **Public booking under `/book/[salonSlug]/`** — no auth required, separate from dashboard route group
-6. **Walk-in support** — `guestName`/`guestPhone` on Booking for clients without CRM records
-7. **Price in cents** — avoid floating-point issues
-8. **BookingStatus enum** — PENDING → CONFIRMED → IN_PROGRESS → COMPLETED | CANCELLED | NO_SHOW
+1. **`$transaction` for booking creation** — TOCTOU race: `validateBooking()` + `prisma.booking.create()` must be wrapped in `prisma.$transaction()` to prevent double-bookings under concurrent requests
+2. **Centralize `getAuthenticatedSalon()`** — Currently copy-pasted 7 times across server action files → extract to `server/auth.ts`
+3. **Deduplicate booking creation** — Identical logic in `actions/bookings.ts`, `actions/public-booking.ts`, and `api/v1/bookings/route.ts` → extract to `server/services/booking-service.ts`
 
-## CONFLICT BETWEEN EXISTING DOCS
+### Should-Add (Quality)
 
-| Issue                                                                                          | Resolution                                                                            |
-| ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| CLAUDE.md says Next.js 14, FRAMEWORK_DECISION.md says upgrade to 15+                           | Start with Next.js 14 (stable, battle-tested). Upgrade path is straightforward later. |
-| CONFIG_REFERENCE.md Prisma schema uses `prisma-client-js`, verified-libraries.md uses Prisma 7 | Use Prisma 7.6.0 — requires `prisma-client` provider, not `prisma-client-js`          |
-| CONFIG_REFERENCE.md has generic models (Organization/Member/Event)                             | Replace with salon-specific domain models above                                       |
-| Auth: CLAUDE.md mentions Supabase Auth, .env template has NEXTAUTH vars                        | Use Supabase Auth via `@supabase/ssr` — drop NextAuth references                      |
+4. **`server/queries/` layer** — Dashboard pages run inline Prisma calls → extract reusable query functions
+5. **Shared Zod schemas** — `createBookingSchema` defined separately in actions and API routes → single source in `lib/validations/`
+6. **Audit log model** — `AuditLog { salonId, userId, action, entityType, entityId, metadata, createdAt }` — log every business mutation
+7. **Production rate limiting** — Replace in-memory `Map` with `@upstash/ratelimit` (persists across deploys/restarts)
+
+### Future (Phase 2)
+
+8. **WhatsApp** — Use existing `twilio` package (supports WhatsApp Business API natively via `whatsapp:+{phone}` prefix, no new dependency)
+9. **Background jobs** — Replace cron API routes with `inngest` (retries, fan-out, monitoring, cron schedules, no infra to manage)
+10. **Structured logging** — Replace `console.error` with `pino` for JSON structured logs
+
+---
+
+## PAPERCLIP INSIGHTS
+
+[Paperclip](https://github.com/paperclipai/paperclip) is an open-source Node.js + React platform for orchestrating AI agent companies — org charts, budgets, governance, and goal-aligned autonomous task execution.
+
+### Patterns to Adopt
+
+| Paperclip Pattern                       | OpenChair Application                                                                                                                                                                                    |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`companyId` scoping on every query**  | OpenChair has `salonId` on every model but some queries don't filter by it (e.g. `findConflictingBooking` in booking-validation). Fix: add `salonId` to every `where` clause.                            |
+| **`logActivity()` on every mutation**   | Paperclip logs every write with `{companyId, actorId, action}`. OpenChair should add an `AuditLog` model — critical for salon owners to answer "who cancelled this?"                                     |
+| **`assertCompanyAccess()` centralized** | Paperclip has one auth check function reused everywhere. OpenChair does ad-hoc `findFirst({ where: { id, salonId } })` in every action. Extract to `server/auth.ts`.                                     |
+| **Service layer with injectable `db`**  | Paperclip services accept `db` as parameter for testability. OpenChair calls `prisma` globally — extract `server/services/` with dependency injection for easier mocking.                                |
+| **Immutable append-only audit log**     | Paperclip's history is immutable with full traceability. OpenChair's `SmsLog` is a good start — extend the pattern to all business events (booking created/cancelled/rescheduled, client updated, etc.). |
+| **Typed API responses**                 | Paperclip uses shared response types between API and frontend. OpenChair should add API response types in `types/` for the v1 endpoints.                                                                 |
+
+### Patterns to Skip
+
+| Pattern                         | Why                                           |
+| ------------------------------- | --------------------------------------------- |
+| Heartbeat / agent orchestration | OpenChair has no autonomous AI agents         |
+| Multi-company isolation         | Single-salon SaaS per tenant (already scoped) |
+| Plugin/extension system         | Too early — core features first               |
+| Org charts / hierarchies        | Salon teams are flat (owner + stylists)       |
+| Budget enforcement per agent    | No per-agent cost tracking needed             |
+
+### When Paperclip Becomes Relevant
+
+If OpenChair evolves so each salon has an autonomous AI assistant (handling scheduling, marketing, client comms independently), Paperclip's agent orchestration patterns would apply. That's Phase 5+ territory.
+
+---
+
+## DEV TOOLING MATRIX
+
+| Category        | Tool                      | Version            | Status                              |
+| --------------- | ------------------------- | ------------------ | ----------------------------------- |
+| Package Manager | pnpm                      | `10.x`             | ✅ Already using                    |
+| Bundler         | Turbopack (via `--turbo`) | built-in           | ⚠️ Add `dev:turbo` script           |
+| Linter          | ESLint                    | `^8`               | ✅ Keep v8 (Next.js 14 compat)      |
+| Formatter       | Prettier                  | `3.8.1`            | ✅ Already optimal                  |
+| Test Framework  | Vitest                    | `4.1.2`            | ✅ Latest                           |
+| Type Checker    | TypeScript                | `^5.8`             | ✅ Latest 5.x                       |
+| E2E Testing     | Playwright                | `1.58.2`           | ✅ Installed (no tests written yet) |
+| Git Hooks       | Husky + lint-staged       | `9.1.7` / `16.4.0` | ✅ Already using                    |
+| Commit Linting  | Commitlint                | `20.5.0`           | ✅ Already using                    |
+| Bundle Analysis | @next/bundle-analyzer     | —                  | 🔴 Not installed — add              |
+
+---
+
+## SETUP STEPS (for a new contributor)
+
+1. Clone repo, run `pnpm install`
+2. Copy `.env.example` → `.env.local`, fill in Supabase + Twilio credentials
+3. Start Supabase local: `npx supabase start`
+4. Run migrations: `npx prisma migrate dev`
+5. Seed data: `pnpm tsx prisma/seed.ts`
+6. Start dev server: `pnpm dev` (or `pnpm dev:turbo`)
+7. Run quality gates: `pnpm lint && pnpm tsc --noEmit && pnpm vitest run`
+
+---
 
 ## SOURCES
 
-- cal.com (Next.js + Prisma booking SaaS) — scheduling patterns, overlap detection
-- event.me (Next.js + Prisma + Clerk) — slot generation, availability schema
-- CrazyStack (Node.js salon management) — salon domain model, entity relationships
-- piyush-eon/calendly-clone (Next.js + Prisma) — server actions pattern, route organization
-- Supabase official docs — `@supabase/ssr` setup, connection pooling
-- shadcn/ui docs — component config, new-york style deprecation
-- Next.js official docs — vitest setup, ESLint config, tsconfig
-- npm registry — all package versions verified 2026-03-31
+- https://github.com/paperclipai/paperclip — Architecture patterns, audit logging, multi-tenant scoping
+- https://www.npmjs.com — All package version verification
+- https://nextjs.org/docs — Next.js 14/15 comparison, Turbopack status
+- https://www.prisma.io/blog — Prisma 7 Rust engine removal, performance benchmarks
+- https://orm.drizzle.team — Drizzle comparison (rejected)
+- https://supabase.com/docs — SDK versions, SSR setup
+- https://inngest.com/docs — Background job patterns for Next.js
+- https://upstash.com/docs/redis/sdks/ratelimit — Production rate limiting
+- https://vitest.dev — Vitest 4.x config
+- https://playwright.dev — E2E testing setup

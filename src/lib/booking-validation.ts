@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma';
+import { prisma, type PrismaTransactionClient } from '@/lib/prisma';
 
 /**
  * Check if a stylist has any overlapping bookings in the given time range.
@@ -8,9 +8,11 @@ export async function findConflictingBooking(
   stylistId: string,
   startTime: Date,
   endTime: Date,
-  excludeBookingId?: string
+  excludeBookingId?: string,
+  tx?: PrismaTransactionClient
 ) {
-  return prisma.booking.findFirst({
+  const db = tx ?? prisma;
+  return db.booking.findFirst({
     where: {
       stylistId,
       id: excludeBookingId ? { not: excludeBookingId } : undefined,
@@ -29,13 +31,20 @@ export async function validateBooking(
   stylistId: string,
   startTime: Date,
   endTime: Date,
-  excludeBookingId?: string
+  excludeBookingId?: string,
+  tx?: PrismaTransactionClient
 ): Promise<string | null> {
   if (endTime <= startTime) {
     return 'End time must be after start time';
   }
 
-  const conflict = await findConflictingBooking(stylistId, startTime, endTime, excludeBookingId);
+  const conflict = await findConflictingBooking(
+    stylistId,
+    startTime,
+    endTime,
+    excludeBookingId,
+    tx
+  );
 
   if (conflict) {
     return 'This time slot conflicts with an existing booking';
