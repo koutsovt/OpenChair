@@ -1,25 +1,12 @@
-import { redirect } from 'next/navigation';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { getAuthenticatedSalon } from '@/server/auth';
 import { prisma } from '@/lib/prisma';
 import { WaitlistEntriesList } from './_components/waitlist-entries-list';
 
 export default async function WaitlistPage() {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
-
-  if (!authUser) redirect('/sign-in');
-
-  const user = await prisma.user.findUnique({
-    where: { supabaseId: authUser.id },
-    include: { salon: true },
-  });
-
-  if (!user?.salon) redirect('/sign-in');
+  const salon = await getAuthenticatedSalon();
 
   const entries = await prisma.waitlistEntry.findMany({
-    where: { salonId: user.salon.id },
+    where: { salonId: salon.id },
     include: {
       client: { select: { id: true, name: true, phone: true } },
       service: { select: { id: true, name: true } },

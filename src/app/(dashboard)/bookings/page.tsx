@@ -1,7 +1,6 @@
-import { redirect } from 'next/navigation';
 import { format, startOfDay, endOfDay } from 'date-fns';
 import { CalendarDays } from 'lucide-react';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { getAuthenticatedSalon } from '@/server/auth';
 import { prisma } from '@/lib/prisma';
 import { Card, CardContent } from '@/components/ui/card';
 import { DatePickerNav } from './_components/date-picker-nav';
@@ -16,21 +15,8 @@ export default async function BookingsPage({
   searchParams: Promise<{ date?: string; view?: string }>;
 }) {
   const params = await searchParams;
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
+  const salon = await getAuthenticatedSalon();
 
-  if (!authUser) redirect('/sign-in');
-
-  const user = await prisma.user.findUnique({
-    where: { supabaseId: authUser.id },
-    include: { salon: true },
-  });
-
-  if (!user?.salon) redirect('/sign-in');
-
-  const salon = user.salon;
   const dateStr = params.date ?? format(new Date(), 'yyyy-MM-dd');
   const targetDate = new Date(dateStr);
   const view = (params.view === 'timeline' ? 'timeline' : 'list') as 'list' | 'timeline';

@@ -1,18 +1,16 @@
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
 export async function getAuthenticatedSalon() {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
+  const session = await getServerSession(authOptions);
 
-  if (!authUser) {
+  if (!session?.user?.id) {
     throw new Error('Not authenticated');
   }
 
   const user = await prisma.user.findUnique({
-    where: { supabaseId: authUser.id },
+    where: { id: session.user.id },
     include: { salon: true },
   });
 

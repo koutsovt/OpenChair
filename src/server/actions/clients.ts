@@ -137,9 +137,9 @@ export async function searchClients(query: string) {
       salonId: salon.id,
       isActive: true,
       OR: [
-        { name: { contains: query, mode: 'insensitive' } },
-        { phone: { contains: query, mode: 'insensitive' } },
-        { email: { contains: query, mode: 'insensitive' } },
+        { name: { contains: query } },
+        { phone: { contains: query } },
+        { email: { contains: query } },
       ],
     },
     orderBy: { name: 'asc' },

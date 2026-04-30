@@ -1,4 +1,18 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+
+vi.mock('@/lib/env', () => ({
+  env: {
+    DATABASE_URL: 'postgresql://test:test@localhost:5432/test',
+    TWILIO_ACCOUNT_SID: 'placeholder',
+    TWILIO_AUTH_TOKEN: 'placeholder',
+    TWILIO_PHONE_NUMBER: '+10000000000',
+  },
+}));
+
+vi.mock('@/lib/prisma', () => ({
+  prisma: {},
+}));
+
 import { parseCommand } from '../sms-commands';
 
 describe('parseCommand', () => {

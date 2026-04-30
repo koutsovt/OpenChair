@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 
-const mockUpdateSession = vi.fn().mockResolvedValue(new Response());
+const mockGetToken = vi.fn();
 
-vi.mock('@/lib/supabase/middleware', () => ({
-  updateSession: (...args: unknown[]) => mockUpdateSession(...args),
+vi.mock('next-auth/jwt', () => ({
+  getToken: (...args: unknown[]) => mockGetToken(...args),
 }));
 
 import { middleware } from '@/middleware';
@@ -14,40 +14,49 @@ function makeRequest(pathname: string): NextRequest {
 }
 
 beforeEach(() => {
-  mockUpdateSession.mockClear();
+  mockGetToken.mockReset();
 });
 
 describe('middleware', () => {
-  it('skips Supabase session for /api/v1/ routes', async () => {
+  it('allows /api/v1/ routes without auth', async () => {
     const result = await middleware(makeRequest('/api/v1/salon/test'));
-    expect(result).toBeUndefined();
-    expect(mockUpdateSession).not.toHaveBeenCalled();
+    expect(result).toBeInstanceOf(NextResponse);
+    expect(result.status).toBe(200);
+    expect(mockGetToken).not.toHaveBeenCalled();
   });
 
-  it('skips Supabase session for /api/v1/sms/webhook', async () => {
-    const result = await middleware(makeRequest('/api/v1/sms/webhook'));
-    expect(result).toBeUndefined();
-    expect(mockUpdateSession).not.toHaveBeenCalled();
+  it('allows /sign-in without auth', async () => {
+    const result = await middleware(makeRequest('/sign-in'));
+    expect(result).toBeInstanceOf(NextResponse);
+    expect(result.status).toBe(200);
+    expect(mockGetToken).not.toHaveBeenCalled();
   });
 
-  it('skips Supabase session for /api/v1/bookings', async () => {
-    const result = await middleware(makeRequest('/api/v1/bookings'));
-    expect(result).toBeUndefined();
-    expect(mockUpdateSession).not.toHaveBeenCalled();
+  it('allows /sign-up without auth', async () => {
+    const result = await middleware(makeRequest('/sign-up'));
+    expect(result).toBeInstanceOf(NextResponse);
+    expect(result.status).toBe(200);
+    expect(mockGetToken).not.toHaveBeenCalled();
   });
 
-  it('calls updateSession for non-API routes', async () => {
-    await middleware(makeRequest('/dashboard'));
-    expect(mockUpdateSession).toHaveBeenCalledOnce();
+  it('allows /api/auth routes without auth', async () => {
+    const result = await middleware(makeRequest('/api/auth/signin'));
+    expect(result).toBeInstanceOf(NextResponse);
+    expect(result.status).toBe(200);
+    expect(mockGetToken).not.toHaveBeenCalled();
   });
 
-  it('calls updateSession for /bookings (non v1)', async () => {
-    await middleware(makeRequest('/bookings'));
-    expect(mockUpdateSession).toHaveBeenCalledOnce();
+  it('redirects to /sign-in when no token on protected route', async () => {
+    mockGetToken.mockResolvedValue(null);
+    const result = await middleware(makeRequest('/dashboard'));
+    expect(result.status).toBe(307);
+    expect(result.headers.get('location')).toContain('/sign-in');
   });
 
-  it('calls updateSession for root path', async () => {
-    await middleware(makeRequest('/'));
-    expect(mockUpdateSession).toHaveBeenCalledOnce();
+  it('allows protected routes when token exists', async () => {
+    mockGetToken.mockResolvedValue({ id: 'user-1' });
+    const result = await middleware(makeRequest('/dashboard'));
+    expect(result).toBeInstanceOf(NextResponse);
+    expect(result.status).toBe(200);
   });
 });

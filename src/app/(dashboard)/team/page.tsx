@@ -1,7 +1,6 @@
 import Link from 'next/link';
-import { redirect } from 'next/navigation';
 import { Mail, Phone, UserCog } from 'lucide-react';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { getAuthenticatedSalon } from '@/server/auth';
 import { prisma } from '@/lib/prisma';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -10,34 +9,13 @@ import { EditStylistDialog } from './_components/edit-stylist-dialog';
 import { DeleteStylistButton } from './_components/delete-stylist-button';
 
 export default async function TeamPage() {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
+  const salon = await getAuthenticatedSalon();
 
-  if (!authUser) {
-    redirect('/sign-in');
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { supabaseId: authUser.id },
-    include: {
-      salon: {
-        include: {
-          stylists: {
-            include: { availability: true },
-            orderBy: { sortOrder: 'asc' },
-          },
-        },
-      },
-    },
+  const stylists = await prisma.stylist.findMany({
+    where: { salonId: salon.id },
+    include: { availability: true },
+    orderBy: { sortOrder: 'asc' },
   });
-
-  if (!user?.salon) {
-    redirect('/sign-in');
-  }
-
-  const { stylists } = user.salon;
 
   return (
     <div className="space-y-6">
@@ -91,7 +69,8 @@ export default async function TeamPage() {
                   </div>
                 )}
                 <p className="text-xs">
-                  {stylist.availability.filter((a) => a.isActive).length} days available
+                  {stylist.availability.filter((a: { isActive: boolean }) => a.isActive).length}{' '}
+                  days available
                 </p>
               </CardContent>
             </Card>

@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { Sidebar } from '@/components/layout/sidebar';
 import { Header } from '@/components/layout/header';
@@ -13,17 +14,14 @@ import {
 import { cn } from '@/lib/utils';
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
+  const session = await getServerSession(authOptions);
 
-  if (!authUser) {
+  if (!session?.user?.id) {
     redirect('/sign-in');
   }
 
   const user = await prisma.user.findUnique({
-    where: { supabaseId: authUser.id },
+    where: { id: session.user.id },
     include: { salon: true },
   });
 

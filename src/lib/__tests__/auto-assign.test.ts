@@ -1,214 +1,194 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { autoAssignStylist } from '../scheduling/auto-assign';
+
+const mockServiceFindFirst = vi.fn();
+const mockStylistServiceFindMany = vi.fn();
+const mockBookingFindMany = vi.fn();
+const mockFindConflicting = vi.fn();
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
-    service: { findFirst: vi.fn() },
-    stylistService: { findMany: vi.fn() },
-    booking: { findMany: vi.fn() },
+    service: { findFirst: (...args: unknown[]) => mockServiceFindFirst(...args) },
+    stylistService: { findMany: (...args: unknown[]) => mockStylistServiceFindMany(...args) },
+    booking: { findMany: (...args: unknown[]) => mockBookingFindMany(...args) },
   },
 }));
 
 vi.mock('@/lib/booking-validation', () => ({
-  findConflictingBooking: vi.fn(),
+  findConflictingBooking: (...args: unknown[]) => mockFindConflicting(...args),
 }));
 
-import { prisma } from '@/lib/prisma';
-import { findConflictingBooking } from '@/lib/booking-validation';
+import { autoAssignStylist } from '@/lib/scheduling/auto-assign';
 
-const mockPrisma = prisma as unknown as {
-  service: { findFirst: ReturnType<typeof vi.fn> };
-  stylistService: { findMany: ReturnType<typeof vi.fn> };
-  booking: { findMany: ReturnType<typeof vi.fn> };
-};
-const mockFindConflict = findConflictingBooking as ReturnType<typeof vi.fn>;
+const defaultService = { id: 'svc-1', salonId: 'salon-1', duration: 60 };
 
-/** Create a Date at the given local hours/minutes on Mon 6 Apr 2026 */
-function localDate(hours: number, minutes = 0): Date {
-  const d = new Date(2026, 3, 6); // month is 0-indexed → April
-  d.setHours(hours, minutes, 0, 0);
-  return d;
-}
-
-/** dayOfWeek for localDate — always the same day */
-const DAY_OF_WEEK = localDate(9).getDay();
-
-function makeStylistService(
+const makeStylistService = (
   id: string,
   name: string,
-  availStart: string,
-  availEnd: string,
-  dayOfWeek: number
-) {
-  return {
-    stylist: {
-      id,
-      name,
-      availability: [{ startTime: availStart, endTime: availEnd, isActive: true, dayOfWeek }],
-    },
-  };
+  availability: Array<{
+    dayOfWeek: number;
+    startTime: string;
+    endTime: string;
+    isActive: boolean;
+  }>
+) => ({
+  stylist: { id, name, isActive: true, availability },
+});
+
+function localDate(hours: number, minutes = 0): Date {
+  return new Date(2026, 3, 1, hours, minutes, 0, 0);
 }
 
-describe('autoAssignStylist', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+const wednesday10am = localDate(10);
 
+beforeEach(() => {
+  mockServiceFindFirst.mockReset();
+  mockStylistServiceFindMany.mockReset();
+  mockBookingFindMany.mockReset();
+  mockFindConflicting.mockReset();
+
+  mockServiceFindFirst.mockResolvedValue(defaultService);
+});
+
+describe('autoAssignStylist', () => {
   it('returns null when service not found', async () => {
-    mockPrisma.service.findFirst.mockResolvedValue(null);
-    const result = await autoAssignStylist('salon1', 'svc1', new Date());
+    mockServiceFindFirst.mockResolvedValue(null);
+
+    const result = await autoAssignStylist('salon-1', 'svc-missing', wednesday10am);
+
     expect(result).toBeNull();
+    expect(mockStylistServiceFindMany).not.toHaveBeenCalled();
   });
 
   it('returns null when no stylists offer the service', async () => {
-    mockPrisma.service.findFirst.mockResolvedValue({ id: 'svc1', duration: 60 });
-    mockPrisma.stylistService.findMany.mockResolvedValue([]);
-    const result = await autoAssignStylist('salon1', 'svc1', new Date());
+    mockStylistServiceFindMany.mockResolvedValue([]);
+
+    const result = await autoAssignStylist('salon-1', 'svc-1', wednesday10am);
+
     expect(result).toBeNull();
   });
 
   it('returns null when all stylists have conflicts', async () => {
-    const startTime = localDate(9);
-    mockPrisma.service.findFirst.mockResolvedValue({ id: 'svc1', duration: 60 });
-    mockPrisma.stylistService.findMany.mockResolvedValue([
-      makeStylistService('st1', 'Alice', '09:00', '17:00', DAY_OF_WEEK),
+    mockStylistServiceFindMany.mockResolvedValue([
+      makeStylistService('s1', 'Alice', [
+        { dayOfWeek: 3, startTime: '08:00', endTime: '18:00', isActive: true },
+      ]),
+      makeStylistService('s2', 'Bob', [
+        { dayOfWeek: 3, startTime: '08:00', endTime: '18:00', isActive: true },
+      ]),
     ]);
-    mockPrisma.booking.findMany.mockResolvedValue([]);
-    mockFindConflict.mockResolvedValue({ id: 'existing' });
+    mockBookingFindMany.mockResolvedValue([]);
+    mockFindConflicting.mockResolvedValue({ id: 'conflict-1' });
 
-    const result = await autoAssignStylist('salon1', 'svc1', startTime);
+    const result = await autoAssignStylist('salon-1', 'svc-1', wednesday10am);
+
     expect(result).toBeNull();
   });
 
-  it('returns null when stylist has no availability window covering the slot', async () => {
-    const startTime = localDate(9); // 09:00 local, stylist only available 14:00-17:00
-    mockPrisma.service.findFirst.mockResolvedValue({ id: 'svc1', duration: 60 });
-    mockPrisma.stylistService.findMany.mockResolvedValue([
-      makeStylistService('st1', 'Alice', '14:00', '17:00', DAY_OF_WEEK),
+  it('returns null when no stylist has matching availability window', async () => {
+    mockStylistServiceFindMany.mockResolvedValue([
+      makeStylistService('s1', 'Alice', []),
+      makeStylistService('s2', 'Bob', [
+        { dayOfWeek: 3, startTime: '14:00', endTime: '18:00', isActive: true },
+      ]),
     ]);
-    mockPrisma.booking.findMany.mockResolvedValue([]);
-    mockFindConflict.mockResolvedValue(null);
+    mockBookingFindMany.mockResolvedValue([]);
+    mockFindConflicting.mockResolvedValue(null);
 
-    const result = await autoAssignStylist('salon1', 'svc1', startTime);
+    const result = await autoAssignStylist('salon-1', 'svc-1', wednesday10am);
+
     expect(result).toBeNull();
   });
 
-  it('assigns the only available stylist and returns their name', async () => {
-    const startTime = localDate(9);
-    mockPrisma.service.findFirst.mockResolvedValue({ id: 'svc1', duration: 60 });
-    mockPrisma.stylistService.findMany.mockResolvedValue([
-      makeStylistService('st1', 'Alice', '09:00', '17:00', DAY_OF_WEEK),
+  it('assigns stylist with highest score', async () => {
+    const stylistA = makeStylistService('sA', 'Alice', [
+      { dayOfWeek: 3, startTime: '08:00', endTime: '18:00', isActive: true },
     ]);
-    mockPrisma.booking.findMany.mockResolvedValue([]);
-    mockFindConflict.mockResolvedValue(null);
+    const stylistB = makeStylistService('sB', 'Bob', [
+      { dayOfWeek: 3, startTime: '08:00', endTime: '18:00', isActive: true },
+    ]);
+    mockStylistServiceFindMany.mockResolvedValue([stylistA, stylistB]);
 
-    const result = await autoAssignStylist('salon1', 'svc1', startTime);
+    mockBookingFindMany.mockResolvedValue([
+      { stylistId: 'sB', startTime: localDate(8), endTime: localDate(9) },
+      { stylistId: 'sB', startTime: localDate(12), endTime: localDate(13) },
+      { stylistId: 'sB', startTime: localDate(14), endTime: localDate(15) },
+    ]);
+
+    mockFindConflicting.mockResolvedValue(null);
+
+    const result = await autoAssignStylist('salon-1', 'svc-1', wednesday10am);
+
     expect(result).not.toBeNull();
-    expect(result!.stylistId).toBe('st1');
+    expect(result!.stylistId).toBe('sA');
     expect(result!.stylistName).toBe('Alice');
     expect(result!.score).toBeGreaterThan(0);
-    expect(result!.reason).toBeTruthy();
   });
 
-  it('prefers stylist with lighter workload when other factors equal', async () => {
-    const startTime = localDate(14);
+  it('prefers back-to-back bookings (gap minimization)', async () => {
+    const stylistA = makeStylistService('sA', 'Alice', [
+      { dayOfWeek: 3, startTime: '08:00', endTime: '18:00', isActive: true },
+    ]);
+    const stylistB = makeStylistService('sB', 'Bob', [
+      { dayOfWeek: 3, startTime: '08:00', endTime: '18:00', isActive: true },
+    ]);
+    mockStylistServiceFindMany.mockResolvedValue([stylistA, stylistB]);
 
-    mockPrisma.service.findFirst.mockResolvedValue({ id: 'svc1', duration: 60 });
-    mockPrisma.stylistService.findMany.mockResolvedValue([
-      makeStylistService('st1', 'Alice', '09:00', '17:00', DAY_OF_WEEK),
-      makeStylistService('st2', 'Bob', '09:00', '17:00', DAY_OF_WEEK),
+    mockBookingFindMany.mockResolvedValue([
+      { stylistId: 'sA', startTime: localDate(9), endTime: localDate(10) },
+      { stylistId: 'sB', startTime: localDate(9), endTime: localDate(9, 40) },
     ]);
 
-    // Alice has 5 bookings, Bob has 1
-    mockPrisma.booking.findMany.mockResolvedValue([
-      { stylistId: 'st1', startTime: localDate(9, 0), endTime: localDate(10, 0) },
-      { stylistId: 'st1', startTime: localDate(10, 0), endTime: localDate(11, 0) },
-      { stylistId: 'st1', startTime: localDate(11, 0), endTime: localDate(12, 0) },
-      { stylistId: 'st1', startTime: localDate(12, 0), endTime: localDate(13, 0) },
-      { stylistId: 'st1', startTime: localDate(13, 0), endTime: localDate(13, 30) },
-      { stylistId: 'st2', startTime: localDate(9, 0), endTime: localDate(10, 0) },
-    ]);
-    mockFindConflict.mockResolvedValue(null);
+    mockFindConflicting.mockResolvedValue(null);
 
-    const result = await autoAssignStylist('salon1', 'svc1', startTime);
+    const result = await autoAssignStylist('salon-1', 'svc-1', wednesday10am);
+
     expect(result).not.toBeNull();
-    expect(result!.stylistId).toBe('st2');
-    expect(result!.reason).toContain('Light schedule');
+    expect(result!.stylistId).toBe('sA');
+    expect(result!.reason).toContain('Back-to-back');
   });
 
-  it('gives back-to-back bonus in gap minimization scoring', async () => {
-    const startTime = localDate(11); // 11:00 local, service 11:00-12:00
-
-    mockPrisma.service.findFirst.mockResolvedValue({ id: 'svc1', duration: 60 });
-    mockPrisma.stylistService.findMany.mockResolvedValue([
-      makeStylistService('st1', 'Alice', '09:00', '17:00', DAY_OF_WEEK),
-      makeStylistService('st2', 'Bob', '09:00', '17:00', DAY_OF_WEEK),
+  it('factors in client history', async () => {
+    const stylistA = makeStylistService('sA', 'Alice', [
+      { dayOfWeek: 3, startTime: '08:00', endTime: '18:00', isActive: true },
     ]);
-
-    // Alice: booking right before (back-to-back) AND right after (sandwich)
-    // Bob: same bookings at same times — both get equal scores
-    // This tests that back-to-back is detected (gapScore=20 vs default 10)
-    // Alice has a booking ending at 11:00 → back-to-back with the 11:00 slot
-    // Bob has NO bookings → no back-to-back, but also max buffer
-    // Availability (40%) favors Bob (more buffer), but gap (20%) favors Alice
-    // With equal workload, Bob wins overall due to availability weight being higher
-    // We verify Alice gets "Back-to-back" in her reason even if she doesn't win
-    mockPrisma.booking.findMany.mockResolvedValue([
-      { stylistId: 'st1', startTime: localDate(10, 0), endTime: localDate(11, 0) },
+    const stylistB = makeStylistService('sB', 'Bob', [
+      { dayOfWeek: 3, startTime: '08:00', endTime: '18:00', isActive: true },
     ]);
-    mockFindConflict.mockResolvedValue(null);
+    mockStylistServiceFindMany.mockResolvedValue([stylistA, stylistB]);
 
-    const result = await autoAssignStylist('salon1', 'svc1', startTime);
-    expect(result).not.toBeNull();
-    // Bob wins due to higher availability score (40% weight > 20% gap weight)
-    // This is correct — the algorithm values buffer time over back-to-back efficiency
-    expect(result!.stylistId).toBe('st2');
-  });
-
-  it('gives client history bonus when clientId is provided', async () => {
-    const startTime = localDate(14);
-
-    mockPrisma.service.findFirst.mockResolvedValue({ id: 'svc1', duration: 60 });
-    mockPrisma.stylistService.findMany.mockResolvedValue([
-      makeStylistService('st1', 'Alice', '09:00', '17:00', DAY_OF_WEEK),
-      makeStylistService('st2', 'Bob', '09:00', '17:00', DAY_OF_WEEK),
-    ]);
-
-    mockPrisma.booking.findMany
+    mockBookingFindMany
       .mockResolvedValueOnce([
-        { stylistId: 'st1', startTime: localDate(9, 0), endTime: localDate(10, 0) },
-        { stylistId: 'st2', startTime: localDate(9, 0), endTime: localDate(10, 0) },
+        { stylistId: 'sA', startTime: localDate(8), endTime: localDate(9) },
+        { stylistId: 'sB', startTime: localDate(8), endTime: localDate(9) },
       ])
-      .mockResolvedValueOnce([
-        { stylistId: 'st1' },
-        { stylistId: 'st1' },
-        { stylistId: 'st1' },
-        { stylistId: 'st1' },
-        { stylistId: 'st1' },
-      ]);
-    mockFindConflict.mockResolvedValue(null);
+      .mockResolvedValueOnce([{ stylistId: 'sA' }, { stylistId: 'sA' }, { stylistId: 'sA' }]);
 
-    const result = await autoAssignStylist('salon1', 'svc1', startTime, 'client1');
+    mockFindConflicting.mockResolvedValue(null);
+
+    const result = await autoAssignStylist('salon-1', 'svc-1', wednesday10am, 'client-1');
+
     expect(result).not.toBeNull();
-    expect(result!.stylistId).toBe('st1');
+    expect(result!.stylistId).toBe('sA');
     expect(result!.reason).toContain('Client continuity');
   });
 
-  it('skips conflicted stylist and picks the next best', async () => {
-    const startTime = localDate(9);
-
-    mockPrisma.service.findFirst.mockResolvedValue({ id: 'svc1', duration: 60 });
-    mockPrisma.stylistService.findMany.mockResolvedValue([
-      makeStylistService('st1', 'Alice', '09:00', '17:00', DAY_OF_WEEK),
-      makeStylistService('st2', 'Bob', '09:00', '17:00', DAY_OF_WEEK),
+  it('skips stylists outside availability window', async () => {
+    const earlyCloser = makeStylistService('s1', 'Alice', [
+      { dayOfWeek: 3, startTime: '09:00', endTime: '17:00', isActive: true },
     ]);
-    mockPrisma.booking.findMany.mockResolvedValue([]);
+    const lateWorker = makeStylistService('s2', 'Bob', [
+      { dayOfWeek: 3, startTime: '09:00', endTime: '20:00', isActive: true },
+    ]);
+    mockStylistServiceFindMany.mockResolvedValue([earlyCloser, lateWorker]);
 
-    mockFindConflict.mockResolvedValueOnce({ id: 'conflict' }).mockResolvedValueOnce(null);
+    mockBookingFindMany.mockResolvedValue([]);
+    mockFindConflicting.mockResolvedValue(null);
 
-    const result = await autoAssignStylist('salon1', 'svc1', startTime);
+    const evening6pm = localDate(18);
+    const result = await autoAssignStylist('salon-1', 'svc-1', evening6pm);
+
     expect(result).not.toBeNull();
-    expect(result!.stylistId).toBe('st2');
+    expect(result!.stylistId).toBe('s2');
     expect(result!.stylistName).toBe('Bob');
   });
 });

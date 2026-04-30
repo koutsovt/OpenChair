@@ -1,32 +1,15 @@
-import { redirect } from 'next/navigation';
 import { Users } from 'lucide-react';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { getAuthenticatedSalon } from '@/server/auth';
 import { prisma } from '@/lib/prisma';
 import { Card, CardContent } from '@/components/ui/card';
 import { ClientTable } from './_components/client-table';
 import { AddClientDialog } from './_components/add-client-dialog';
 
 export default async function ClientsPage() {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
-
-  if (!authUser) {
-    redirect('/sign-in');
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { supabaseId: authUser.id },
-    include: { salon: true },
-  });
-
-  if (!user?.salon) {
-    redirect('/sign-in');
-  }
+  const salon = await getAuthenticatedSalon();
 
   const clients = await prisma.client.findMany({
-    where: { salonId: user.salon.id, isActive: true },
+    where: { salonId: salon.id, isActive: true },
     orderBy: { name: 'asc' },
   });
 

@@ -1,8 +1,8 @@
-import { notFound, redirect } from 'next/navigation';
+import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { format } from 'date-fns';
 import { ArrowLeft } from 'lucide-react';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { getAuthenticatedSalon } from '@/server/auth';
 import { prisma } from '@/lib/prisma';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -14,22 +14,10 @@ import { BookingDetailActions } from './_components/booking-detail-actions';
 
 export default async function BookingDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
-
-  if (!authUser) redirect('/sign-in');
-
-  const user = await prisma.user.findUnique({
-    where: { supabaseId: authUser.id },
-    include: { salon: true },
-  });
-
-  if (!user?.salon) redirect('/sign-in');
+  const salon = await getAuthenticatedSalon();
 
   const booking = await prisma.booking.findFirst({
-    where: { id, salonId: user.salon.id },
+    where: { id, salonId: salon.id },
     include: { client: true, stylist: true, service: true },
   });
 

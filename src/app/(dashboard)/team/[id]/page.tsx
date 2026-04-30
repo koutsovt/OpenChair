@@ -1,7 +1,7 @@
 import Link from 'next/link';
-import { notFound, redirect } from 'next/navigation';
+import { notFound } from 'next/navigation';
 import { ArrowLeft, Mail, Phone } from 'lucide-react';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { getAuthenticatedSalon } from '@/server/auth';
 import { prisma } from '@/lib/prisma';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -15,27 +15,10 @@ interface StylistDetailPageProps {
 
 export default async function StylistDetailPage({ params }: StylistDetailPageProps) {
   const { id } = await params;
-
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
-
-  if (!authUser) {
-    redirect('/sign-in');
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { supabaseId: authUser.id },
-    include: { salon: true },
-  });
-
-  if (!user?.salon) {
-    redirect('/sign-in');
-  }
+  const salon = await getAuthenticatedSalon();
 
   const stylist = await prisma.stylist.findFirst({
-    where: { id, salonId: user.salon.id },
+    where: { id, salonId: salon.id },
     include: { availability: { orderBy: { dayOfWeek: 'asc' } } },
   });
 

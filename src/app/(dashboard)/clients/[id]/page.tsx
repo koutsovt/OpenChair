@@ -1,8 +1,8 @@
-import { notFound, redirect } from 'next/navigation';
+import { notFound } from 'next/navigation';
 import { format } from 'date-fns';
 import { ArrowLeft, Mail, Phone, Calendar, MessageSquare, Tag } from 'lucide-react';
 import Link from 'next/link';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { getAuthenticatedSalon } from '@/server/auth';
 import { prisma } from '@/lib/prisma';
 import { formatPhone } from '@/lib/utils';
 import { BOOKING_STATUS_LABELS, BOOKING_STATUS_COLORS } from '@/lib/constants';
@@ -19,27 +19,10 @@ interface ClientDetailPageProps {
 
 export default async function ClientDetailPage({ params }: ClientDetailPageProps) {
   const { id } = await params;
-
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
-
-  if (!authUser) {
-    redirect('/sign-in');
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { supabaseId: authUser.id },
-    include: { salon: true },
-  });
-
-  if (!user?.salon) {
-    redirect('/sign-in');
-  }
+  const salon = await getAuthenticatedSalon();
 
   const client = await prisma.client.findFirst({
-    where: { id, salonId: user.salon.id, isActive: true },
+    where: { id, salonId: salon.id, isActive: true },
   });
 
   if (!client) {

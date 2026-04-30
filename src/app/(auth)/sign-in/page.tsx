@@ -1,9 +1,9 @@
 'use client';
 
-import { useTransition } from 'react';
+import { useState } from 'react';
+import { signIn } from 'next-auth/react';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import { signIn } from '@/server/actions/auth';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -17,17 +17,28 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
 export default function SignInPage() {
-  const [isPending, startTransition] = useTransition();
+  const [isPending, setIsPending] = useState(false);
 
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    setIsPending(true);
+
     const formData = new FormData(e.currentTarget);
-    startTransition(async () => {
-      const result = await signIn(formData);
-      if (result?.error) {
-        toast.error(result.error);
-      }
+    const email = formData.get('email') as string;
+    const password = formData.get('password') as string;
+
+    const result = await signIn('credentials', {
+      email,
+      password,
+      redirect: false,
     });
+
+    if (result?.error) {
+      toast.error('Invalid email or password');
+      setIsPending(false);
+    } else {
+      window.location.href = '/dashboard';
+    }
   }
 
   return (

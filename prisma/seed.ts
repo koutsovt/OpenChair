@@ -1,19 +1,12 @@
 /* eslint-disable no-console */
-import { PrismaPg } from '@prisma/adapter-pg';
+import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3';
 import { PrismaClient } from '../src/generated/prisma/client';
-import { createClient } from '@supabase/supabase-js';
+import { hashSync } from 'bcryptjs';
 
-const DATABASE_URL = process.env.DATABASE_URL!;
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321';
-const SERVICE_KEY =
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU';
-
-const adapter = new PrismaPg(DATABASE_URL);
-const prisma = new PrismaClient({ adapter });
-const supabase = createClient(SUPABASE_URL, SERVICE_KEY, {
-  auth: { autoRefreshToken: false, persistSession: false },
+const adapter = new PrismaBetterSqlite3({
+  url: process.env.DATABASE_URL || 'file:./prisma/dev.db',
 });
+const prisma = new PrismaClient({ adapter });
 
 async function main() {
   // Wipe everything
@@ -25,28 +18,15 @@ async function main() {
   await prisma.client.deleteMany();
   await prisma.stylist.deleteMany();
   await prisma.salon.deleteMany();
+  await prisma.session.deleteMany();
+  await prisma.account.deleteMany();
   await prisma.user.deleteMany();
 
-  // Delete all Supabase auth users
-  const { data: authUsers } = await supabase.auth.admin.listUsers();
-  for (const u of authUsers?.users ?? []) {
-    await supabase.auth.admin.deleteUser(u.id);
-  }
-
-  // Create demo Supabase auth user
-  const { data: authData, error: authErr } = await supabase.auth.admin.createUser({
-    email: 'demo@openchair.dev',
-    password: 'demo1234',
-    email_confirm: true,
-    user_metadata: { first_name: 'Maria', last_name: 'Kotsifas' },
-  });
-  if (authErr) throw authErr;
-
-  // Create Prisma user
+  // Create demo user with hashed password
   const owner = await prisma.user.create({
     data: {
       email: 'demo@openchair.dev',
-      supabaseId: authData.user.id,
+      password: hashSync('demo1234', 12),
       firstName: 'Maria',
       lastName: 'Kotsifas',
       phone: '0412 000 001',

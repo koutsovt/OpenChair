@@ -1,6 +1,5 @@
-import { redirect } from 'next/navigation';
 import { Scissors } from 'lucide-react';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { getAuthenticatedSalon } from '@/server/auth';
 import { prisma } from '@/lib/prisma';
 import { formatPrice, formatDuration } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,25 +12,8 @@ import { StylistAssignment } from './_components/stylist-assignment';
 import { CategoryManager } from './_components/category-manager';
 
 export default async function ServicesPage() {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
-
-  if (!authUser) {
-    redirect('/sign-in');
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { supabaseId: authUser.id },
-    include: { salon: true },
-  });
-
-  if (!user?.salon) {
-    redirect('/sign-in');
-  }
-
-  const salonId = user.salon.id;
+  const salon = await getAuthenticatedSalon();
+  const salonId = salon.id;
 
   const [services, categories, stylists] = await Promise.all([
     prisma.service.findMany({

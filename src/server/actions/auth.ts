@@ -1,26 +1,8 @@
 'use server';
 
 import { redirect } from 'next/navigation';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { hash } from 'bcryptjs';
 import { prisma } from '@/lib/prisma';
-
-export async function signIn(formData: FormData) {
-  const email = formData.get('email') as string;
-  const password = formData.get('password') as string;
-
-  if (!email || !password) {
-    return { error: 'Email and password are required' };
-  }
-
-  const supabase = await createSupabaseServerClient();
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
-
-  if (error) {
-    return { error: error.message };
-  }
-
-  redirect('/dashboard');
-}
 
 export async function signUp(formData: FormData) {
   const email = formData.get('email') as string;
@@ -32,27 +14,17 @@ export async function signUp(formData: FormData) {
     return { error: 'All fields are required' };
   }
 
-  const supabase = await createSupabaseServerClient();
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      data: { first_name: firstName, last_name: lastName },
-    },
-  });
-
-  if (error) {
-    return { error: error.message };
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing) {
+    return { error: 'An account with this email already exists' };
   }
 
-  if (!data.user) {
-    return { error: 'Failed to create account' };
-  }
+  const hashedPassword = await hash(password, 12);
 
   const user = await prisma.user.create({
     data: {
       email,
-      supabaseId: data.user.id,
+      password: hashedPassword,
       firstName,
       lastName,
     },
@@ -71,11 +43,9 @@ export async function signUp(formData: FormData) {
     },
   });
 
-  redirect('/dashboard');
+  redirect('/sign-in');
 }
 
 export async function signOut() {
-  const supabase = await createSupabaseServerClient();
-  await supabase.auth.signOut();
-  redirect('/sign-in');
+  redirect('/api/auth/signout');
 }
