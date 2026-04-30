@@ -61,7 +61,7 @@ beforeEach(() => {
 
 describe('createClient', () => {
   it('creates client with valid data', async () => {
-    mockClientFindMany.mockResolvedValue([]);
+    mockClientFindFirst.mockResolvedValueOnce(undefined); // duplicate check returns no match
     mockClientCreate.mockResolvedValue({ id: 'c1', name: 'John', phone: '0412345678' });
 
     const result = await createClient(makeFormData(validFields));
@@ -92,16 +92,16 @@ describe('createClient', () => {
   });
 
   it('detects duplicate phone number', async () => {
-    mockClientFindMany.mockResolvedValue([{ id: 'c1', name: 'Existing', phone: '0412345678' }]);
+    mockClientFindFirst.mockResolvedValueOnce({ id: 'c1', name: 'Existing' });
 
-    const result = await createClient(makeFormData({ ...validFields, phone: '0412-345-678' }));
+    const result = await createClient(makeFormData({ ...validFields, phone: '0412345678' }));
 
     expect(result).toEqual({ error: expect.stringContaining('already exists') });
     expect(mockClientCreate).not.toHaveBeenCalled();
   });
 
   it('revalidates /clients path on success', async () => {
-    mockClientFindMany.mockResolvedValue([]);
+    mockClientFindFirst.mockResolvedValueOnce(undefined); // duplicate check
     mockClientCreate.mockResolvedValue({ id: 'c1' });
 
     await createClient(makeFormData({ ...validFields, phone: '0400000000' }));

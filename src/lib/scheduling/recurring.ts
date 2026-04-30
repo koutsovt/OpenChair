@@ -1,6 +1,7 @@
 import { addMinutes, addWeeks, setDay, setHours, setMinutes, startOfDay } from 'date-fns';
 import { prisma } from '@/lib/prisma';
 import { findConflictingBooking } from '@/lib/booking-validation';
+import { createBookingCore } from '@/server/services/booking-service';
 
 type ProcessResult =
   | { success: true; bookingId: string; adjustedTime: boolean }
@@ -86,26 +87,27 @@ async function createBookingAndAdvance(
   endTime: Date,
   adjustedTime: boolean
 ): Promise<ProcessResult> {
-  const booking = await prisma.booking.create({
-    data: {
+  try {
+    const booking = await createBookingCore({
+      stylistId: recurring.stylistId,
+      serviceId: recurring.service.id,
+      salonId: recurring.salonId,
       startTime,
       endTime,
       price: recurring.service.price,
-      serviceId: recurring.service.id,
-      stylistId: recurring.stylistId,
       clientId: recurring.clientId,
-      salonId: recurring.salonId,
-      recurringBookingId: recurring.id,
-      status: 'CONFIRMED',
-    },
-  });
+    });
 
-  // Advance nextRunDate
-  const nextRun = addWeeks(recurring.nextRunDate, recurring.intervalWeeks);
-  await prisma.recurringBooking.update({
-    where: { id: recurring.id },
-    data: { nextRunDate: nextRun },
-  });
+    // Advance nextRunDate
+    const nextRun = addWeeks(recurring.nextRunDate, recurring.intervalWeeks);
+    await prisma.recurringBooking.update({
+      where: { id: recurring.id },
+      data: { nextRunDate: nextRun },
+    });
 
-  return { success: true, bookingId: booking.id, adjustedTime };
+    return { success: true, bookingId: booking.id, adjustedTime };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Booking creation failed';
+    return { success: false, reason: message };
+  }
 }

@@ -20,7 +20,7 @@ export async function GET(request: Request) {
       nextRunDate: { lte: lookAhead },
     },
     include: {
-      client: { select: { id: true, name: true, phone: true } },
+      client: { select: { id: true, name: true, phone: true, smsOptOut: true } },
       service: { select: { name: true } },
       stylist: { select: { name: true } },
       salon: { select: { id: true, name: true } },
@@ -31,7 +31,7 @@ export async function GET(request: Request) {
     recurringBookings.map(async (recurring) => {
       const result = await processRecurringBooking(recurring.id);
 
-      if (result.success && recurring.client.phone) {
+      if (result.success && recurring.client.phone && !recurring.client.smsOptOut) {
         const booking = await prisma.booking.findUnique({
           where: { id: result.bookingId },
         });

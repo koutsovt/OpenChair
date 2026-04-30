@@ -5,7 +5,6 @@ import { processRecurringBooking } from '../scheduling/recurring';
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     recurringBooking: { findUnique: vi.fn(), update: vi.fn() },
-    booking: { create: vi.fn() },
   },
 }));
 
@@ -13,14 +12,19 @@ vi.mock('@/lib/booking-validation', () => ({
   findConflictingBooking: vi.fn(),
 }));
 
+vi.mock('@/server/services/booking-service', () => ({
+  createBookingCore: vi.fn(),
+}));
+
 import { prisma } from '@/lib/prisma';
 import { findConflictingBooking } from '@/lib/booking-validation';
+import { createBookingCore } from '@/server/services/booking-service';
 
 const mockPrisma = prisma as unknown as {
   recurringBooking: { findUnique: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> };
-  booking: { create: ReturnType<typeof vi.fn> };
 };
 const mockFindConflict = findConflictingBooking as ReturnType<typeof vi.fn>;
+const mockCreateBookingCore = createBookingCore as ReturnType<typeof vi.fn>;
 
 function makeRecurring(overrides = {}) {
   return {
@@ -62,28 +66,30 @@ describe('processRecurringBooking', () => {
   it('creates booking at preferred time when slot is free', async () => {
     mockPrisma.recurringBooking.findUnique.mockResolvedValue(makeRecurring());
     mockFindConflict.mockResolvedValue(null);
-    mockPrisma.booking.create.mockResolvedValue({ id: 'booking1' });
+    mockCreateBookingCore.mockResolvedValue({ id: 'booking1' });
     mockPrisma.recurringBooking.update.mockResolvedValue({});
 
     const result = await processRecurringBooking('rec1');
 
     expect(result).toEqual({ success: true, bookingId: 'booking1', adjustedTime: false });
 
-    // Verify booking was created with correct data
-    const createCall = mockPrisma.booking.create.mock.calls[0][0];
-    expect(createCall.data.price).toBe(8000);
-    expect(createCall.data.serviceId).toBe('svc1');
-    expect(createCall.data.stylistId).toBe('st1');
-    expect(createCall.data.clientId).toBe('client1');
-    expect(createCall.data.recurringBookingId).toBe('rec1');
-    expect(createCall.data.status).toBe('CONFIRMED');
+    // Verify createBookingCore was called with correct data
+    expect(mockCreateBookingCore).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stylistId: 'st1',
+        serviceId: 'svc1',
+        salonId: 'salon1',
+        price: 8000,
+        clientId: 'client1',
+      })
+    );
   });
 
   it('falls back to offset when preferred time has conflict', async () => {
     mockPrisma.recurringBooking.findUnique.mockResolvedValue(makeRecurring());
     // Preferred time conflicts, first offset (+30min) is free
     mockFindConflict.mockResolvedValueOnce({ id: 'conflict' }).mockResolvedValueOnce(null);
-    mockPrisma.booking.create.mockResolvedValue({ id: 'booking2' });
+    mockCreateBookingCore.mockResolvedValue({ id: 'booking2' });
     mockPrisma.recurringBooking.update.mockResolvedValue({});
 
     const result = await processRecurringBooking('rec1');
@@ -95,7 +101,7 @@ describe('processRecurringBooking', () => {
     const recurring = makeRecurring();
     mockPrisma.recurringBooking.findUnique.mockResolvedValue(recurring);
     mockFindConflict.mockResolvedValue(null);
-    mockPrisma.booking.create.mockResolvedValue({ id: 'booking3' });
+    mockCreateBookingCore.mockResolvedValue({ id: 'booking3' });
     mockPrisma.recurringBooking.update.mockResolvedValue({});
 
     await processRecurringBooking('rec1');
@@ -117,7 +123,7 @@ describe('processRecurringBooking', () => {
       reason: 'No available slot within ±2 days of preferred time',
     });
     // Should never have tried to create a booking
-    expect(mockPrisma.booking.create).not.toHaveBeenCalled();
+    expect(mockCreateBookingCore).not.toHaveBeenCalled();
   });
 
   it('tries offsets in correct order: ±30, ±60, ±90, ±120 then days', async () => {
@@ -129,7 +135,7 @@ describe('processRecurringBooking', () => {
       .mockResolvedValueOnce({ id: 'c3' }) // -30
       .mockResolvedValueOnce({ id: 'c4' }) // +60
       .mockResolvedValueOnce(null); // -60 → success
-    mockPrisma.booking.create.mockResolvedValue({ id: 'booking4' });
+    mockCreateBookingCore.mockResolvedValue({ id: 'booking4' });
     mockPrisma.recurringBooking.update.mockResolvedValue({});
 
     const result = await processRecurringBooking('rec1');

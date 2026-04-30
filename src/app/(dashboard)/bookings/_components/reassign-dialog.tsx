@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import { reassignStylistBookings } from '@/server/actions/bookings';
 
 interface ReassignDialogProps {
@@ -40,7 +40,6 @@ export function ReassignDialog({
 }: ReassignDialogProps) {
   const [targetStylistId, setTargetStylistId] = useState<string>('auto');
   const [isPending, startTransition] = useTransition();
-  const { toast } = useToast();
   const router = useRouter();
 
   function handleReassign() {
@@ -49,23 +48,16 @@ export function ReassignDialog({
       const result = await reassignStylistBookings(absentStylistId, date, target);
 
       if (!result.success) {
-        toast({ title: 'Error', description: result.error, variant: 'destructive' });
+        toast.error(result.error);
         return;
       }
 
       const { reassigned, failed } = result;
 
       if (failed.length === 0) {
-        toast({
-          title: 'Bookings reassigned',
-          description: `${reassigned} booking${reassigned !== 1 ? 's' : ''} moved successfully.`,
-        });
+        toast.success(`${reassigned} booking${reassigned !== 1 ? 's' : ''} moved successfully.`);
       } else {
-        toast({
-          title: 'Partial reassignment',
-          description: `${reassigned} moved, ${failed.length} could not be reassigned.`,
-          variant: 'destructive',
-        });
+        toast.error(`${reassigned} moved, ${failed.length} could not be reassigned.`);
       }
 
       onOpenChange(false);

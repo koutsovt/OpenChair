@@ -6,7 +6,7 @@ import { format } from 'date-fns';
 import { Calendar } from '@/components/ui/calendar';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import { rescheduleBooking, getAvailableSlotsAction } from '@/server/actions/bookings';
 
 interface RescheduleDialogProps {
@@ -33,7 +33,6 @@ export function RescheduleDialog({
   const [selectedSlot, setSelectedSlot] = useState<string>('');
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [isPending, startTransition] = useTransition();
-  const { toast } = useToast();
   const router = useRouter();
 
   useEffect(() => {
@@ -50,10 +49,10 @@ export function RescheduleDialog({
     startTransition(async () => {
       const result = await rescheduleBooking(bookingId, selectedSlot);
       if (!result.success) {
-        toast({ title: 'Error', description: result.error, variant: 'destructive' });
+        toast.error(result.error);
         return;
       }
-      toast({ title: 'Rescheduled', description: 'Booking time updated' });
+      toast.success('Booking time updated');
       onOpenChange(false);
       router.refresh();
     });

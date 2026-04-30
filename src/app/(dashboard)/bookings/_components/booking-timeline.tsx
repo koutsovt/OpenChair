@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { BOOKING_STATUS_COLORS } from '@/lib/constants';
 import { rescheduleBooking } from '@/server/actions/bookings';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import { ReassignDialog } from './reassign-dialog';
 import type { BookingStatus } from '@/types';
 
@@ -46,7 +46,6 @@ export function BookingTimeline({
   stylists: StylistColumn[];
   date: string;
 }) {
-  const { toast } = useToast();
   const [dragState, setDragState] = useState<{
     bookingId: string;
     originalStylistId: string;
@@ -195,10 +194,10 @@ export function BookingTimeline({
 
       if (!result.success) {
         setOptimisticBookings(bookings);
-        toast({ title: 'Error', description: result.error, variant: 'destructive' });
+        toast.error(result.error);
       }
     },
-    [dragState, ghostPosition, optimisticBookings, bookings, toast]
+    [dragState, ghostPosition, optimisticBookings, bookings]
   );
 
   const handleDragEnd = useCallback(() => {

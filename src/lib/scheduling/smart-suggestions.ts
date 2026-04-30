@@ -48,13 +48,15 @@ export async function getSuggestedSlots(
 
   if (stylists.length === 0) return [];
 
+  const cappedLimit = Math.min(limit, 20);
   const suggestions: SuggestedSlot[] = [];
 
-  // Iterate through each day in the range
+  // Iterate through each day in the range (capped at 14 days)
   let currentDate = startOfDay(startDate);
-  const lastDate = startOfDay(endDate);
+  const maxDate = addDays(startOfDay(startDate), 14);
+  const lastDate = startOfDay(endDate) > maxDate ? maxDate : startOfDay(endDate);
 
-  while (currentDate <= lastDate && suggestions.length < limit * 3) {
+  while (currentDate <= lastDate && suggestions.length < cappedLimit * 3) {
     const dayStart = startOfDay(currentDate);
     const dayEnd = endOfDay(currentDate);
 
@@ -100,7 +102,7 @@ export async function getSuggestedSlots(
 
   // Sort by score descending and take top N
   suggestions.sort((a, b) => b.score - a.score);
-  return suggestions.slice(0, limit);
+  return suggestions.slice(0, cappedLimit);
 }
 
 export function scoreSlot(

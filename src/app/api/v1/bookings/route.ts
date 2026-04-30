@@ -120,7 +120,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: message }, { status: 409 });
   }
 
-  if (client.phone) {
+  if (client.phone && !client.smsOptOut) {
     const smsBody = bookingConfirmationMessage({
       clientName: client.name,
       salonName: salon.name,
@@ -170,9 +170,7 @@ export async function GET(request: NextRequest) {
       endTime: true,
       status: true,
       price: true,
-      notes: true,
       guestName: true,
-      guestPhone: true,
       createdAt: true,
       service: { select: { id: true, name: true, duration: true, price: true } },
       stylist: { select: { id: true, name: true, imageUrl: true } },

@@ -11,7 +11,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { updateBookingStatus } from '@/server/actions/bookings';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import { RescheduleDialog } from './reschedule-dialog';
 import type { BookingStatus } from '@/types';
 
@@ -31,7 +31,6 @@ export function BookingActions({
   startTime?: string;
 }) {
   const [isPending, startTransition] = useTransition();
-  const { toast } = useToast();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
@@ -41,10 +40,10 @@ export function BookingActions({
     startTransition(async () => {
       const result = await updateBookingStatus(bookingId, status);
       if (!result.success) {
-        toast({ title: 'Error', description: result.error, variant: 'destructive' });
+        toast.error(result.error);
         return;
       }
-      toast({ title: 'Updated', description: `Booking marked as ${status.toLowerCase()}` });
+      toast.success(`Booking marked as ${status.toLowerCase()}`);
       router.refresh();
     });
   }

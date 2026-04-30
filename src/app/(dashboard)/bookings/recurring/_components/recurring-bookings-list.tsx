@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import { pauseRecurringBooking, deleteRecurringBooking } from '@/server/actions/recurring';
 import { DAYS_OF_WEEK } from '@/lib/constants';
 
@@ -32,17 +32,16 @@ type RecurringRow = {
 
 export function RecurringBookingsList({ bookings }: { bookings: RecurringRow[] }) {
   const [isPending, startTransition] = useTransition();
-  const { toast } = useToast();
   const router = useRouter();
 
   function handlePause(id: string, pause: boolean) {
     startTransition(async () => {
       const result = await pauseRecurringBooking(id, pause);
       if (!result.success) {
-        toast({ title: 'Error', description: result.error, variant: 'destructive' });
+        toast.error(result.error);
         return;
       }
-      toast({ title: pause ? 'Paused' : 'Resumed' });
+      toast.success(pause ? 'Paused' : 'Resumed');
       router.refresh();
     });
   }
@@ -51,10 +50,10 @@ export function RecurringBookingsList({ bookings }: { bookings: RecurringRow[] }
     startTransition(async () => {
       const result = await deleteRecurringBooking(id);
       if (!result.success) {
-        toast({ title: 'Error', description: result.error, variant: 'destructive' });
+        toast.error(result.error);
         return;
       }
-      toast({ title: 'Deleted' });
+      toast.success('Deleted');
       router.refresh();
     });
   }

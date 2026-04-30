@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Calendar } from '@/components/ui/calendar';
 import { Card, CardContent } from '@/components/ui/card';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import {
   createBooking,
   getAvailableSlotsAction,
@@ -49,7 +49,6 @@ export function BookingForm({
 }) {
   const [step, setStep] = useState(1);
   const [isPending, startTransition] = useTransition();
-  const { toast } = useToast();
   const router = useRouter();
 
   // Selections
@@ -143,11 +142,11 @@ export function BookingForm({
       });
 
       if (!result.success) {
-        toast({ title: 'Error', description: result.error, variant: 'destructive' });
+        toast.error(result.error);
         return;
       }
 
-      toast({ title: 'Booked!', description: 'Booking created successfully' });
+      toast.success('Booking created successfully');
       router.refresh();
       onClose?.();
     });

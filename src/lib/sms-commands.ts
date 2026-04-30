@@ -1,6 +1,8 @@
+import { addMinutes } from 'date-fns';
 import { prisma } from '@/lib/prisma';
 import { sendSMS, logSms } from '@/lib/twilio';
 import { bookingCancellationMessage } from '@/lib/sms-templates';
+import { createBookingCore } from '@/server/services/booking-service';
 
 export type SmsCommand = 'CANCEL' | 'BOOK' | 'STOP' | null;
 
@@ -129,10 +131,33 @@ async function handleBook(clientId: string, salonId: string): Promise<string> {
       expiresAt: { gt: new Date() },
     },
     orderBy: { notifiedAt: 'desc' },
+    include: { service: true },
   });
 
   if (!waitlistEntry) {
     return "No available slot to claim right now. We'll notify you when one opens up!";
+  }
+
+  if (!waitlistEntry.stylistId) {
+    return 'No stylist assigned to this waitlist entry. Please contact the salon.';
+  }
+
+  const startTime = waitlistEntry.preferredDateStart;
+  const endTime = addMinutes(startTime, waitlistEntry.service.duration);
+
+  try {
+    await createBookingCore({
+      stylistId: waitlistEntry.stylistId,
+      serviceId: waitlistEntry.serviceId,
+      salonId,
+      startTime,
+      endTime,
+      price: waitlistEntry.service.price,
+      clientId,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Booking failed';
+    return `Could not book the slot: ${message}`;
   }
 
   await prisma.waitlistEntry.update({
@@ -140,13 +165,13 @@ async function handleBook(clientId: string, salonId: string): Promise<string> {
     data: { status: 'BOOKED' },
   });
 
-  return "Your spot has been claimed! We'll send you a confirmation shortly.";
+  return "Your spot has been booked! We'll send you a confirmation shortly.";
 }
 
 async function handleStop(clientId: string, salonId: string): Promise<string> {
   await prisma.client.update({
     where: { id: clientId },
-    data: { notes: 'SMS opt-out requested' },
+    data: { smsOptOut: true },
   });
 
   void logSms({

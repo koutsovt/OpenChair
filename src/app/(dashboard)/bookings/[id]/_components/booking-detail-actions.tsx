@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { updateBookingStatus, rescheduleBooking } from '@/server/actions/bookings';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import type { BookingStatus } from '@/types';
 
 export function BookingDetailActions({
@@ -19,7 +19,6 @@ export function BookingDetailActions({
   currentStatus: BookingStatus;
 }) {
   const [isPending, startTransition] = useTransition();
-  const { toast } = useToast();
   const router = useRouter();
   const [showReschedule, setShowReschedule] = useState(false);
   const [newDateTime, setNewDateTime] = useState('');
@@ -31,10 +30,10 @@ export function BookingDetailActions({
     startTransition(async () => {
       const result = await updateBookingStatus(bookingId, status);
       if (!result.success) {
-        toast({ title: 'Error', description: result.error, variant: 'destructive' });
+        toast.error(result.error);
         return;
       }
-      toast({ title: 'Updated', description: `Booking marked as ${status.toLowerCase()}` });
+      toast.success(`Booking marked as ${status.toLowerCase()}`);
       router.refresh();
     });
   }
@@ -44,10 +43,10 @@ export function BookingDetailActions({
     startTransition(async () => {
       const result = await rescheduleBooking(bookingId, new Date(newDateTime).toISOString());
       if (!result.success) {
-        toast({ title: 'Error', description: result.error, variant: 'destructive' });
+        toast.error(result.error);
         return;
       }
-      toast({ title: 'Rescheduled', description: 'Booking time updated' });
+      toast.success('Booking time updated');
       setShowReschedule(false);
       router.refresh();
     });

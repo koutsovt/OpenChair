@@ -1,5 +1,10 @@
+import { compare } from 'bcryptjs';
 import { prisma } from '@/lib/prisma';
 
+/**
+ * Authenticate a salon by comparing the bearer token against hashed API keys.
+ * API keys must be stored as bcrypt hashes (hash on creation/rotation).
+ */
 export async function authenticateSalonByApiKey(request: Request) {
   const authHeader = request.headers.get('authorization');
   if (!authHeader?.startsWith('Bearer ')) {
@@ -11,9 +16,15 @@ export async function authenticateSalonByApiKey(request: Request) {
     return null;
   }
 
-  const salon = await prisma.salon.findUnique({
-    where: { apiKey },
+  const salons = await prisma.salon.findMany({
+    where: { apiKey: { not: null } },
   });
 
-  return salon;
+  for (const salon of salons) {
+    if (salon.apiKey && (await compare(apiKey, salon.apiKey))) {
+      return salon;
+    }
+  }
+
+  return null;
 }

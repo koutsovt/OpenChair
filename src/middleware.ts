@@ -1,12 +1,13 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 
-const publicPaths = ['/sign-in', '/sign-up', '/api/auth', '/api/v1/'];
+const exactPublicPaths = new Set(['/', '/book', '/cancel']);
+const prefixPublicPaths = ['/sign-in', '/sign-up', '/api/auth', '/api/v1/', '/api/health'];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  if (publicPaths.some((p) => pathname.startsWith(p))) {
+  if (exactPublicPaths.has(pathname) || prefixPublicPaths.some((p) => pathname.startsWith(p))) {
     return NextResponse.next();
   }
 

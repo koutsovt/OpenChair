@@ -13,10 +13,3 @@ export const createBookingSchema = z
   .refine((data) => data.clientId || data.guestName, {
     message: 'Either select a client or enter guest name',
   });
-
-export const rescheduleBookingSchema = z.object({
-  id: z.string().min(1),
-  newStartTime: z.string().datetime(),
-});
-
-export type CreateBookingInput = z.infer<typeof createBookingSchema>;

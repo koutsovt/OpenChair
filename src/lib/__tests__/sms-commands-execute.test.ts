@@ -39,6 +39,11 @@ vi.mock('@/lib/sms-templates', () => ({
   bookingCancellationMessage: vi.fn().mockReturnValue('Your booking has been cancelled.'),
 }));
 
+const mockCreateBookingCore = vi.fn();
+vi.mock('@/server/services/booking-service', () => ({
+  createBookingCore: (...args: unknown[]) => mockCreateBookingCore(...args),
+}));
+
 import { executeCommand } from '../sms-commands';
 
 const PHONE = '+61400000001';
@@ -49,6 +54,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockSendSMS.mockResolvedValue({ success: true, sid: 'SM123' });
   mockLogSms.mockResolvedValue({});
+  mockCreateBookingCore.mockResolvedValue({ id: 'booking-1' });
 });
 
 describe('executeCommand', () => {
@@ -99,18 +105,32 @@ describe('executeCommand', () => {
   });
 
   describe('BOOK', () => {
-    it('claims notified waitlist entry', async () => {
+    it('claims notified waitlist entry and creates booking', async () => {
       mockClientFindFirst.mockResolvedValue(CLIENT);
-      mockWaitlistFindFirst.mockResolvedValue({ id: 'wl-1' });
+      mockWaitlistFindFirst.mockResolvedValue({
+        id: 'wl-1',
+        stylistId: 'stylist-1',
+        serviceId: 'service-1',
+        preferredDateStart: new Date('2026-05-01T10:00:00Z'),
+        service: { id: 'service-1', duration: 60, price: 5000 },
+      });
       mockWaitlistUpdate.mockResolvedValue({});
 
       const result = await executeCommand(PHONE, 'BOOK', SALON_ID, 'BOOK');
 
+      expect(mockCreateBookingCore).toHaveBeenCalledWith(
+        expect.objectContaining({
+          stylistId: 'stylist-1',
+          serviceId: 'service-1',
+          salonId: SALON_ID,
+          clientId: 'client-1',
+        })
+      );
       expect(mockWaitlistUpdate).toHaveBeenCalledWith({
         where: { id: 'wl-1' },
         data: { status: 'BOOKED' },
       });
-      expect(result).toContain('spot has been claimed');
+      expect(result).toContain('spot has been booked');
     });
 
     it('returns no available slot when no notified entry', async () => {
@@ -132,7 +152,7 @@ describe('executeCommand', () => {
 
       expect(mockClientUpdate).toHaveBeenCalledWith({
         where: { id: 'client-1' },
-        data: { notes: 'SMS opt-out requested' },
+        data: { smsOptOut: true },
       });
       expect(result).toContain('unsubscribed');
     });

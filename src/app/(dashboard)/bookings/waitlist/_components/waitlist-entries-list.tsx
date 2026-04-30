@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import { cancelWaitlistEntry } from '@/server/actions/waitlist';
 import type { WaitlistStatus } from '@/types';
 
@@ -42,17 +42,16 @@ type WaitlistRow = {
 
 export function WaitlistEntriesList({ entries }: { entries: WaitlistRow[] }) {
   const [isPending, startTransition] = useTransition();
-  const { toast } = useToast();
   const router = useRouter();
 
   function handleCancel(id: string) {
     startTransition(async () => {
       const result = await cancelWaitlistEntry(id);
       if (!result.success) {
-        toast({ title: 'Error', description: result.error, variant: 'destructive' });
+        toast.error(result.error);
         return;
       }
-      toast({ title: 'Cancelled' });
+      toast.success('Cancelled');
       router.refresh();
     });
   }

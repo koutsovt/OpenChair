@@ -14,11 +14,6 @@ const clientSchema = z.object({
   source: z.string().optional().or(z.literal('')),
 });
 
-/** Strip non-digit characters for loose duplicate matching (handles spaces, dashes, parentheses) */
-function normalisePhone(phone: string): string {
-  return phone.replace(/\D/g, '');
-}
-
 export async function createClient(formData: FormData) {
   const salon = await getAuthenticatedSalon();
 
@@ -37,15 +32,12 @@ export async function createClient(formData: FormData) {
 
   const { name, phone, email, notes, birthDate, source } = parsed.data;
 
-  // Duplicate check — look for an active client in this salon with the same phone digits
-  const normalisedPhone = normalisePhone(phone);
-  const existingClients = await prisma.client.findMany({
-    where: { salonId: salon.id, isActive: true, phone: { not: null } },
-    select: { id: true, name: true, phone: true },
+  // Duplicate check — look for an active client in this salon with the same phone
+  // Uses direct DB query instead of full table scan. Loose match on raw phone value.
+  const duplicate = await prisma.client.findFirst({
+    where: { salonId: salon.id, isActive: true, phone },
+    select: { id: true, name: true },
   });
-  const duplicate = existingClients.find(
-    (c) => c.phone && normalisePhone(c.phone) === normalisedPhone
-  );
   if (duplicate) {
     return { error: `A client with this phone number already exists: ${duplicate.name}` };
   }

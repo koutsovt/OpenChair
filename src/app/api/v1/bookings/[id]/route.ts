@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
+import { rateLimit } from '@/lib/rate-limit';
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -13,9 +14,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       endTime: true,
       status: true,
       price: true,
-      notes: true,
       cancelledAt: true,
-      cancelReason: true,
       createdAt: true,
       service: { select: { id: true, name: true, duration: true, price: true } },
       stylist: { select: { id: true, name: true, imageUrl: true } },
@@ -48,6 +47,17 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const parsed = cancelSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
+  }
+
+  const { allowed, resetMs } = rateLimit(`cancel:${parsed.data.phone}`, { max: 5 });
+  if (!allowed) {
+    return NextResponse.json(
+      { error: 'Too many cancellation requests. Try again later.' },
+      {
+        status: 429,
+        headers: { 'Retry-After': String(Math.ceil(resetMs / 1000)) },
+      }
+    );
   }
 
   const booking = await prisma.booking.findUnique({

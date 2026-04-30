@@ -38,6 +38,10 @@ export async function GET(request: Request) {
         return { bookingId: booking.id, sent: false, reason: 'no phone' };
       }
 
+      if (booking.client?.smsOptOut) {
+        return { bookingId: booking.id, sent: false, reason: 'sms opt-out' };
+      }
+
       const message = bookingReminderMessage({
         clientName: name,
         salonName: booking.salon.name,
