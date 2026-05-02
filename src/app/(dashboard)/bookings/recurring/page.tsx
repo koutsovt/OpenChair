@@ -1,4 +1,5 @@
 import { getAuthenticatedSalon } from '@/server/auth';
+import { BlurText } from '@/components/ui/blur-text';
 import { prisma } from '@/lib/prisma';
 import { RecurringBookingsList } from './_components/recurring-bookings-list';
 
@@ -30,7 +31,7 @@ export default async function RecurringBookingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Recurring Bookings</h1>
+        <BlurText text="Recurring Bookings" className="text-2xl font-bold tracking-tight" />
         <p className="text-muted-foreground">
           {rows.length} recurring booking{rows.length !== 1 ? 's' : ''}
         </p>

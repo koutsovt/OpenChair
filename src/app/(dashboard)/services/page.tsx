@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { formatPrice, formatDuration } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { BlurText } from '@/components/ui/blur-text';
 import { Separator } from '@/components/ui/separator';
 import { AddServiceDialog } from './_components/add-service-dialog';
 import { EditServiceDialog } from './_components/edit-service-dialog';
@@ -89,7 +90,7 @@ export default async function ServicesPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Services</h1>
+          <BlurText text="Services" className="text-2xl font-bold tracking-tight" />
           <p className="text-muted-foreground">Manage your salon services and pricing.</p>
         </div>
         <AddServiceDialog categories={categoryList} />

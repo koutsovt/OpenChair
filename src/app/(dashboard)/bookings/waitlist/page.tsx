@@ -1,4 +1,5 @@
 import { getAuthenticatedSalon } from '@/server/auth';
+import { BlurText } from '@/components/ui/blur-text';
 import { prisma } from '@/lib/prisma';
 import { WaitlistEntriesList } from './_components/waitlist-entries-list';
 
@@ -32,7 +33,7 @@ export default async function WaitlistPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Waitlist</h1>
+        <BlurText text="Waitlist" className="text-2xl font-bold tracking-tight" />
         <p className="text-muted-foreground">
           {rows.length} waitlist entr{rows.length !== 1 ? 'ies' : 'y'}
         </p>

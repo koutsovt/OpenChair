@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { AvailabilityForm } from '../_components/availability-form';
+import { CalendarSyncButton } from '../_components/calendar-sync-button';
 
 interface StylistDetailPageProps {
   params: Promise<{ id: string }>;
@@ -41,6 +42,8 @@ export default async function StylistDetailPage({ params }: StylistDetailPagePro
           </Badge>
         </div>
       </div>
+
+      <CalendarSyncButton stylistId={stylist.id} />
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>

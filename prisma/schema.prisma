@@ -142,11 +142,14 @@ model Stylist {
   userId String? @unique
   user   User?   @relation("StylistUser", fields: [userId], references: [id])
 
+  calendarToken String? @unique
+
   availability      StylistAvailability[]
   services          StylistService[]
   bookings          Booking[]
   recurringBookings RecurringBooking[]
   waitlistEntries   WaitlistEntry[]
+  preferredByClients Client[] @relation("PreferredStylist")
 
   @@index([salonId])
   @@map("stylists")
@@ -241,6 +244,16 @@ model Client {
   smsOptOut Boolean   @default(false)
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
+
+  // Hair profile
+  allergies          String?
+  hairType           String?  // straight, wavy, curly, coily
+  hairTexture        String?  // fine, medium, thick
+  naturalColour      String?
+  productPreferences String?
+
+  preferredStylistId String?
+  preferredStylist   Stylist? @relation("PreferredStylist", fields: [preferredStylistId], references: [id], onDelete: SetNull)
 
   salonId  String
   salon    Salon     @relation(fields: [salonId], references: [id], onDelete: Cascade)

@@ -1,5 +1,6 @@
 'use server';
 
+import crypto from 'crypto';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
@@ -146,4 +147,32 @@ export async function updateAvailability(
   revalidatePath('/dashboard/team');
   revalidatePath(`/dashboard/team/${stylistId}`);
   return { success: true };
+}
+
+export async function generateCalendarLink(
+  stylistId: string
+): Promise<{ success: true; url: string } | { success: false; error: string }> {
+  const salon = await getAuthenticatedSalon();
+
+  const stylist = await prisma.stylist.findFirst({
+    where: { id: stylistId, salonId: salon.id },
+  });
+
+  if (!stylist) {
+    return { success: false, error: 'Stylist not found' };
+  }
+
+  const token = stylist.calendarToken ?? crypto.randomUUID();
+
+  if (!stylist.calendarToken) {
+    await prisma.stylist.update({
+      where: { id: stylistId },
+      data: { calendarToken: token },
+    });
+  }
+
+  const baseUrl = process.env.NEXTAUTH_URL ?? 'http://localhost:3000';
+  const url = `${baseUrl}/api/v1/calendar/${stylistId}?token=${token}`;
+
+  return { success: true, url };
 }

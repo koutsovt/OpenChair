@@ -1,4 +1,5 @@
 import { getAuthenticatedSalon } from '@/server/auth';
+import { BlurText } from '@/components/ui/blur-text';
 import { ThemeSettingsForm } from './theme-form';
 import { PRESET_IDS, PRESETS, buildGoogleFontsUrl, type SalonTheme } from '@/lib/theme';
 
@@ -17,7 +18,7 @@ export default async function SettingsPage() {
       ))}
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
+          <BlurText text="Settings" className="text-2xl font-bold tracking-tight" />
           <p className="text-muted-foreground">Customize your salon&apos;s look</p>
         </div>
         <ThemeSettingsForm initialTheme={theme} />

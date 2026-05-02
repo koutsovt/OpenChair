@@ -46,6 +46,7 @@
     "date-fns": "4.1.0",
     "dotenv": "^17.4.2",
     "lucide-react": "^1.7.0",
+    "motion": "^11.18.2",
     "next": "14.2.35",
     "next-auth": "^4.24.14",
     "react": "^18",

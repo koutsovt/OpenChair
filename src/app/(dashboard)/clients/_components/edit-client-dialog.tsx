@@ -23,10 +23,17 @@ interface EditClientDialogProps {
     notes: string | null;
     birthDate: Date | string | null;
     source: string | null;
+    allergies: string | null;
+    hairType: string | null;
+    hairTexture: string | null;
+    naturalColour: string | null;
+    preferredStylistId: string | null;
+    productPreferences: string | null;
   };
+  stylists?: { id: string; name: string }[];
 }
 
-export function EditClientDialog({ client }: EditClientDialogProps) {
+export function EditClientDialog({ client, stylists = [] }: EditClientDialogProps) {
   const [open, setOpen] = useState(false);
 
   async function handleSubmit(formData: FormData) {
@@ -50,7 +57,12 @@ export function EditClientDialog({ client }: EditClientDialogProps) {
           <DialogTitle>Edit Client</DialogTitle>
           <DialogDescription>Update client details.</DialogDescription>
         </DialogHeader>
-        <ClientForm defaultValues={client} onSubmit={handleSubmit} submitLabel="Update Client" />
+        <ClientForm
+          defaultValues={client}
+          stylists={stylists}
+          onSubmit={handleSubmit}
+          submitLabel="Update Client"
+        />
       </DialogContent>
     </Dialog>
   );

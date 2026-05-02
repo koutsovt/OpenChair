@@ -4,6 +4,7 @@ import { getAuthenticatedSalon } from '@/server/auth';
 import { prisma } from '@/lib/prisma';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { BlurText } from '@/components/ui/blur-text';
 import { AddStylistDialog } from './_components/add-stylist-dialog';
 import { EditStylistDialog } from './_components/edit-stylist-dialog';
 import { DeleteStylistButton } from './_components/delete-stylist-button';
@@ -21,7 +22,7 @@ export default async function TeamPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Team</h1>
+          <BlurText text="Team" className="text-2xl font-bold tracking-tight" />
           <p className="text-muted-foreground">Manage your stylists and their availability.</p>
         </div>
         <AddStylistDialog />

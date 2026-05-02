@@ -2,16 +2,24 @@ import { Users } from 'lucide-react';
 import { getAuthenticatedSalon } from '@/server/auth';
 import { prisma } from '@/lib/prisma';
 import { Card, CardContent } from '@/components/ui/card';
+import { BlurText } from '@/components/ui/blur-text';
 import { ClientTable } from './_components/client-table';
 import { AddClientDialog } from './_components/add-client-dialog';
 
 export default async function ClientsPage() {
   const salon = await getAuthenticatedSalon();
 
-  const clients = await prisma.client.findMany({
-    where: { salonId: salon.id, isActive: true },
-    orderBy: { name: 'asc' },
-  });
+  const [clients, stylists] = await Promise.all([
+    prisma.client.findMany({
+      where: { salonId: salon.id, isActive: true },
+      orderBy: { name: 'asc' },
+    }),
+    prisma.stylist.findMany({
+      where: { salonId: salon.id, isActive: true },
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
+    }),
+  ]);
 
   const clientRows = clients.map((c) => ({
     id: c.id,
@@ -26,10 +34,10 @@ export default async function ClientsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Clients</h1>
+          <BlurText text="Clients" className="text-2xl font-bold tracking-tight" />
           <p className="text-muted-foreground">Manage your client database.</p>
         </div>
-        <AddClientDialog />
+        <AddClientDialog stylists={stylists} />
       </div>
 
       {clients.length === 0 ? (

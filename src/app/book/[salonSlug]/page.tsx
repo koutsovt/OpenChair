@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
+import { AuroraBackground } from '@/components/ui/aurora-background';
 import { ServicePicker } from './_components/ServicePicker';
 
 interface PageProps {
@@ -51,7 +52,7 @@ export default async function BookSalonPage({ params }: PageProps) {
   }
 
   return (
-    <div className="min-h-screen bg-white">
+    <AuroraBackground className="min-h-screen">
       <header className="border-b px-4 py-6">
         <div className="mx-auto max-w-2xl">
           <h1 className="text-2xl font-bold">{salon.name}</h1>
@@ -65,6 +66,6 @@ export default async function BookSalonPage({ params }: PageProps) {
       <main className="mx-auto max-w-2xl px-4 py-8">
         <ServicePicker salonSlug={salonSlug} groupedServices={grouped} stylists={salon.stylists} />
       </main>
-    </div>
+    </AuroraBackground>
   );
 }

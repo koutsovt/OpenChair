@@ -12,6 +12,7 @@ import {
   type SalonTheme,
 } from '@/lib/theme';
 import { cn } from '@/lib/utils';
+import { GradientText } from '@/components/ui/gradient-text';
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await getServerSession(authOptions);
@@ -46,7 +47,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       <div id="salon-theme-scope" className={cn('flex min-h-screen', isDark && 'dark')}>
         <aside className="hidden w-64 border-r bg-background lg:block">
           <div className="px-6 py-4">
-            <h1 className="text-lg font-bold">OpenChair</h1>
+            <GradientText className="text-lg font-bold">OpenChair</GradientText>
           </div>
           <Sidebar />
         </aside>

@@ -14,7 +14,11 @@ import {
 import { ClientForm } from './client-form';
 import { createClient } from '@/server/actions/clients';
 
-export function AddClientDialog() {
+interface AddClientDialogProps {
+  stylists?: { id: string; name: string }[];
+}
+
+export function AddClientDialog({ stylists = [] }: AddClientDialogProps) {
   const [open, setOpen] = useState(false);
 
   async function handleSubmit(formData: FormData) {
@@ -38,7 +42,7 @@ export function AddClientDialog() {
           <DialogTitle>Add Client</DialogTitle>
           <DialogDescription>Add a new client to your salon.</DialogDescription>
         </DialogHeader>
-        <ClientForm onSubmit={handleSubmit} submitLabel="Add Client" />
+        <ClientForm stylists={stylists} onSubmit={handleSubmit} submitLabel="Add Client" />
       </DialogContent>
     </Dialog>
   );

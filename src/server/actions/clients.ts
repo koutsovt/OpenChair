@@ -12,6 +12,30 @@ const clientSchema = z.object({
   notes: z.string().optional().or(z.literal('')),
   birthDate: z.string().optional().or(z.literal('')),
   source: z.string().optional().or(z.literal('')),
+  allergies: z
+    .string()
+    .nullish()
+    .transform((v) => v ?? ''),
+  hairType: z
+    .string()
+    .nullish()
+    .transform((v) => v ?? ''),
+  hairTexture: z
+    .string()
+    .nullish()
+    .transform((v) => v ?? ''),
+  naturalColour: z
+    .string()
+    .nullish()
+    .transform((v) => v ?? ''),
+  preferredStylistId: z
+    .string()
+    .nullish()
+    .transform((v) => v ?? ''),
+  productPreferences: z
+    .string()
+    .nullish()
+    .transform((v) => v ?? ''),
 });
 
 export async function createClient(formData: FormData) {
@@ -24,13 +48,32 @@ export async function createClient(formData: FormData) {
     notes: formData.get('notes'),
     birthDate: formData.get('birthDate'),
     source: formData.get('source'),
+    allergies: formData.get('allergies'),
+    hairType: formData.get('hairType'),
+    hairTexture: formData.get('hairTexture'),
+    naturalColour: formData.get('naturalColour'),
+    preferredStylistId: formData.get('preferredStylistId'),
+    productPreferences: formData.get('productPreferences'),
   });
 
   if (!parsed.success) {
     return { error: parsed.error.issues[0].message };
   }
 
-  const { name, phone, email, notes, birthDate, source } = parsed.data;
+  const {
+    name,
+    phone,
+    email,
+    notes,
+    birthDate,
+    source,
+    allergies,
+    hairType,
+    hairTexture,
+    naturalColour,
+    preferredStylistId,
+    productPreferences,
+  } = parsed.data;
 
   // Duplicate check — look for an active client in this salon with the same phone
   // Uses direct DB query instead of full table scan. Loose match on raw phone value.
@@ -50,6 +93,12 @@ export async function createClient(formData: FormData) {
       notes: notes || null,
       birthDate: birthDate ? new Date(birthDate) : null,
       source: source || null,
+      allergies: allergies || null,
+      hairType: hairType || null,
+      hairTexture: hairTexture || null,
+      naturalColour: naturalColour || null,
+      preferredStylistId: preferredStylistId || null,
+      productPreferences: productPreferences || null,
       salonId: salon.id,
     },
   });
@@ -76,13 +125,32 @@ export async function updateClient(id: string, formData: FormData) {
     notes: formData.get('notes'),
     birthDate: formData.get('birthDate'),
     source: formData.get('source'),
+    allergies: formData.get('allergies'),
+    hairType: formData.get('hairType'),
+    hairTexture: formData.get('hairTexture'),
+    naturalColour: formData.get('naturalColour'),
+    preferredStylistId: formData.get('preferredStylistId'),
+    productPreferences: formData.get('productPreferences'),
   });
 
   if (!parsed.success) {
     return { error: parsed.error.issues[0].message };
   }
 
-  const { name, phone, email, notes, birthDate, source } = parsed.data;
+  const {
+    name,
+    phone,
+    email,
+    notes,
+    birthDate,
+    source,
+    allergies,
+    hairType,
+    hairTexture,
+    naturalColour,
+    preferredStylistId,
+    productPreferences,
+  } = parsed.data;
 
   await prisma.client.update({
     where: { id },
@@ -93,6 +161,12 @@ export async function updateClient(id: string, formData: FormData) {
       notes: notes || null,
       birthDate: birthDate ? new Date(birthDate) : null,
       source: source || null,
+      allergies: allergies || null,
+      hairType: hairType || null,
+      hairTexture: hairTexture || null,
+      naturalColour: naturalColour || null,
+      preferredStylistId: preferredStylistId || null,
+      productPreferences: productPreferences || null,
     },
   });
 

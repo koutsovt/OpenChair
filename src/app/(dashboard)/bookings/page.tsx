@@ -3,6 +3,7 @@ import { CalendarDays } from 'lucide-react';
 import { getAuthenticatedSalon } from '@/server/auth';
 import { prisma } from '@/lib/prisma';
 import { Card, CardContent } from '@/components/ui/card';
+import { BlurText } from '@/components/ui/blur-text';
 import { DatePickerNav } from './_components/date-picker-nav';
 import { ViewToggle } from './_components/view-toggle';
 import { BookingList } from './_components/booking-list';
@@ -95,7 +96,7 @@ export default async function BookingsPage({
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Bookings</h1>
+          <BlurText text="Bookings" className="text-2xl font-bold tracking-tight" />
           <p className="text-muted-foreground">
             {bookingRows.length} booking{bookingRows.length !== 1 ? 's' : ''} on{' '}
             {format(targetDate, 'd MMM yyyy')}
