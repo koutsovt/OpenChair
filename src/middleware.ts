@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 
-const exactPublicPaths = new Set(['/', '/book', '/cancel']);
+const exactPublicPaths = new Set(['/', '/book', '/cancel', '/demo']);
 const prefixPublicPaths = ['/sign-in', '/sign-up', '/api/auth', '/api/v1/', '/api/health'];
 
 export async function middleware(request: NextRequest) {
