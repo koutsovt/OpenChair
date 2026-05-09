@@ -7,7 +7,10 @@ const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
-  // Wipe everything
+  // Wipe everything (order matters — child tables before parents)
+  await prisma.smsLog.deleteMany();
+  await prisma.waitlistEntry.deleteMany();
+  await prisma.recurringBooking.deleteMany();
   await prisma.booking.deleteMany();
   await prisma.stylistService.deleteMany();
   await prisma.stylistAvailability.deleteMany();
