@@ -4,14 +4,9 @@ import { prisma } from '@/lib/prisma';
 import { processRecurringBooking } from '@/lib/scheduling/recurring';
 import { sendSMS, logSms } from '@/lib/twilio';
 import { recurringBookingMessage } from '@/lib/sms-templates';
-import { env } from '@/lib/env';
+import { withCronAuth } from '@/lib/api/cron-auth';
 
-export async function GET(request: Request) {
-  const authHeader = request.headers.get('authorization');
-  if (authHeader !== `Bearer ${env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
+async function handler(_request: Request): Promise<NextResponse> {
   const lookAhead = addDays(new Date(), 14);
 
   const recurringBookings = await prisma.recurringBooking.findMany({
@@ -66,3 +61,5 @@ export async function GET(request: Request) {
 
   return NextResponse.json({ processed: results.length, results });
 }
+
+export const GET = withCronAuth(handler);

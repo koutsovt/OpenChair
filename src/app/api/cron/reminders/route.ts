@@ -3,14 +3,9 @@ import { addDays, startOfDay, endOfDay } from 'date-fns';
 import { prisma } from '@/lib/prisma';
 import { sendSMS, logSms } from '@/lib/twilio';
 import { bookingReminderMessage } from '@/lib/sms-templates';
-import { env } from '@/lib/env';
+import { withCronAuth } from '@/lib/api/cron-auth';
 
-export async function GET(request: Request) {
-  const authHeader = request.headers.get('authorization');
-  if (authHeader !== `Bearer ${env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
+async function handler(_request: Request): Promise<NextResponse> {
   const tomorrow = addDays(new Date(), 1);
 
   const bookings = await prisma.booking.findMany({
@@ -69,3 +64,5 @@ export async function GET(request: Request) {
 
   return NextResponse.json({ processed: results.length, results });
 }
+
+export const GET = withCronAuth(handler);
