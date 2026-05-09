@@ -29,3 +29,11 @@ export type SuggestedSlot = {
   score: number;
   reason: string;
 };
+
+// Alternative slots returned to guest when their pick is unavailable
+export type AlternativeSlot = {
+  start: string; // ISO string — safe for client components
+  end: string;
+  stylistId: string;
+  stylistName: string;
+};

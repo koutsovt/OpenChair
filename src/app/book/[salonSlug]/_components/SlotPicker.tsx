@@ -5,7 +5,9 @@ import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
 import { Calendar } from '@/components/ui/calendar';
 import { Button } from '@/components/ui/button';
-import { getPublicAvailableSlots } from '@/server/actions/public-booking';
+import { getPublicAvailableSlots, getAlternativeSlots } from '@/server/actions/public-booking';
+import { AlternativeSlots } from './AlternativeSlots';
+import type { AlternativeSlot } from '@/types';
 
 interface SlotPickerProps {
   salonSlug: string;
@@ -18,6 +20,7 @@ export function SlotPicker({ salonSlug, stylistId, serviceId, availableDays }: S
   const router = useRouter();
   const [selectedDate, setSelectedDate] = useState<Date | undefined>();
   const [slots, setSlots] = useState<{ start: string; end: string }[]>([]);
+  const [alternatives, setAlternatives] = useState<AlternativeSlot[]>([]);
   const [isPending, startTransition] = useTransition();
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
 
@@ -34,6 +37,7 @@ export function SlotPicker({ salonSlug, stylistId, serviceId, availableDays }: S
     setSelectedDate(date);
     setSelectedSlot(null);
     setSlots([]);
+    setAlternatives([]);
 
     startTransition(async () => {
       const result = await getPublicAvailableSlots(
@@ -43,6 +47,12 @@ export function SlotPicker({ salonSlug, stylistId, serviceId, availableDays }: S
         date.toISOString()
       );
       setSlots(result);
+
+      // If no slots on this day, fetch nearby alternatives cross-stylist.
+      if (result.length === 0) {
+        const alts = await getAlternativeSlots(salonSlug, stylistId, serviceId, date);
+        setAlternatives(alts);
+      }
     });
   }
 
@@ -73,11 +83,18 @@ export function SlotPicker({ salonSlug, stylistId, serviceId, availableDays }: S
       {isPending && <p className="text-sm text-muted-foreground">Loading available times…</p>}
 
       {selectedDate && !isPending && slots.length === 0 && (
-        <div className="space-y-2">
-          <p className="text-sm text-muted-foreground">No available slots on this date.</p>
+        <div className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Want to be notified if a slot opens up? Contact the salon to join the waitlist.
+            No available slots on {format(selectedDate, 'EEEE, MMMM d')}.
           </p>
+          <AlternativeSlots
+            alternatives={alternatives}
+            salonSlug={salonSlug}
+            serviceId={serviceId}
+            preferredDate={selectedDate.toISOString()}
+            preferredStylistId={stylistId}
+            heading={alternatives.length > 0 ? 'Next available times' : undefined}
+          />
         </div>
       )}
 

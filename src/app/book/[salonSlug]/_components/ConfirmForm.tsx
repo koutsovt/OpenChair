@@ -5,8 +5,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { createPublicBooking } from '@/server/actions/public-booking';
+import { createPublicBooking, getAlternativeSlots } from '@/server/actions/public-booking';
+import { AlternativeSlots } from './AlternativeSlots';
 import { CheckCircleIcon } from 'lucide-react';
+import type { AlternativeSlot } from '@/types';
 
 interface ConfirmFormProps {
   salonSlug: string;
@@ -32,9 +34,11 @@ export function ConfirmForm({
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [bookingId, setBookingId] = useState<string | null>(null);
+  const [alternatives, setAlternatives] = useState<AlternativeSlot[] | null>(null);
 
   function handleSubmit(formData: FormData) {
     setError(null);
+    setAlternatives(null);
 
     const clientName = formData.get('clientName') as string;
     const clientPhone = formData.get('clientPhone') as string;
@@ -65,6 +69,19 @@ export function ConfirmForm({
 
       if (!result.success) {
         setError(result.error);
+        // On race-condition conflict, surface alternative slots immediately.
+        if (
+          result.error.toLowerCase().includes('already booked') ||
+          result.error.toLowerCase().includes('conflict')
+        ) {
+          const alts = await getAlternativeSlots(
+            salonSlug,
+            stylistId,
+            serviceId,
+            new Date(startTime)
+          );
+          setAlternatives(alts);
+        }
         return;
       }
 
@@ -112,7 +129,21 @@ export function ConfirmForm({
         <Textarea id="notes" name="notes" placeholder="Any special requests or notes" rows={3} />
       </div>
 
-      {error && <p className="text-sm font-medium text-red-600">{error}</p>}
+      {error && (
+        <div className="space-y-4">
+          <p className="text-sm font-medium text-red-600">{error}</p>
+          {alternatives !== null && (
+            <AlternativeSlots
+              alternatives={alternatives}
+              salonSlug={salonSlug}
+              serviceId={serviceId}
+              preferredDate={startTime}
+              preferredStylistId={stylistId}
+              heading="This time was just taken. Here are the next available times:"
+            />
+          )}
+        </div>
+      )}
 
       <Button type="submit" disabled={isPending} className="w-full">
         {isPending ? 'Booking…' : 'Confirm booking'}
