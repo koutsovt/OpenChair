@@ -55,7 +55,10 @@ export async function GET(request: NextRequest) {
     secret: env.NEXTAUTH_SECRET,
   });
 
-  const response = NextResponse.redirect(new URL('/dashboard', request.url));
+  // Use NEXTAUTH_URL as the base so the redirect works correctly behind Railway's
+  // reverse proxy (request.url resolves to the internal 0.0.0.0 address in prod).
+  const base = env.NEXTAUTH_URL ?? request.url;
+  const response = NextResponse.redirect(new URL('/dashboard', base));
   response.cookies.set(COOKIE_NAME, token, {
     httpOnly: true,
     sameSite: 'lax',
