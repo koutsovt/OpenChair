@@ -294,7 +294,160 @@ async function main() {
       source: 'walk-in',
       notes: 'Fortnightly cut. Short back and sides fade.',
     },
-    { name: 'Noah White', phone: '0498 111 012', source: 'referral' },
+    {
+      name: 'Noah White',
+      phone: '0498 111 012',
+      source: 'referral',
+      hairType: 'wavy',
+      hairTexture: 'thick',
+      naturalColour: 'black',
+    },
+    // ── 13 new clients ───────────────────────────────────────
+    {
+      name: 'Chloe Nguyen',
+      phone: '0498 111 013',
+      email: 'chloe.n@gmail.com',
+      source: 'instagram',
+      birthDate: new Date('1996-11-03'),
+      notes: 'Loves bold colour changes. Always tips well.',
+      hairType: 'straight',
+      hairTexture: 'fine',
+      naturalColour: 'black',
+      productPreferences: 'Olaplex, K18',
+    },
+    {
+      name: 'Sophie Blackwell',
+      phone: '0498 111 014',
+      email: 'sophie.bw@icloud.com',
+      source: 'google',
+      birthDate: new Date('1990-04-18'),
+      notes: 'Keratin client every 4 months.',
+      hairType: 'wavy',
+      hairTexture: 'thick',
+      naturalColour: 'dark brown',
+      productPreferences: 'GKhair keratin',
+    },
+    {
+      name: 'Ava Robinson',
+      phone: '0498 111 015',
+      email: 'ava.robinson@outlook.com',
+      source: 'referral',
+      birthDate: new Date('2000-08-25'),
+      hairType: 'curly',
+      hairTexture: 'medium',
+      naturalColour: 'medium brown',
+    },
+    {
+      name: 'Isabella Scott',
+      phone: '0498 111 016',
+      source: 'walk-in',
+      notes: 'Scalp sensitivity — avoid sulphates.',
+      allergies: 'Sulphate-based shampoos',
+      hairType: 'wavy',
+      hairTexture: 'fine',
+      naturalColour: 'light brown',
+    },
+    {
+      name: 'Mila Petrov',
+      phone: '0498 111 017',
+      email: 'mila.p@gmail.com',
+      source: 'instagram',
+      birthDate: new Date('1998-01-30'),
+      notes: 'Balayage regular — every 10 weeks.',
+      hairType: 'straight',
+      hairTexture: 'medium',
+      naturalColour: 'ash blonde',
+      productPreferences: 'Redken All Soft',
+    },
+    {
+      name: 'Penelope Hayes',
+      phone: '0498 111 018',
+      email: 'penelope.h@yahoo.com',
+      source: 'google',
+      birthDate: new Date('1985-06-12'),
+      notes: 'Prefers morning appointments. Brings own reference photos.',
+      hairType: 'straight',
+      hairTexture: 'thick',
+      naturalColour: 'dark blonde',
+    },
+    {
+      name: 'Freya Campbell',
+      phone: '0498 111 019',
+      email: 'freya.c@gmail.com',
+      source: 'referral',
+      notes: 'Referred by Lily Anderson. Curly hair specialist needed.',
+      hairType: 'curly',
+      hairTexture: 'thick',
+      naturalColour: 'red',
+      allergies: 'PPD',
+    },
+    {
+      name: 'Sienna Morris',
+      phone: '0498 111 020',
+      email: 'sienna.m@outlook.com',
+      source: 'instagram',
+      birthDate: new Date('1993-09-07'),
+      hairType: 'wavy',
+      hairTexture: 'medium',
+      naturalColour: 'medium brown',
+      productPreferences: 'Moroccanoil',
+    },
+    {
+      name: 'Hannah Kim',
+      phone: '0498 111 021',
+      email: 'hannah.kim@gmail.com',
+      source: 'google',
+      birthDate: new Date('2001-02-14'),
+      notes: 'Student — prefers weekend slots.',
+      hairType: 'straight',
+      hairTexture: 'fine',
+      naturalColour: 'black',
+    },
+    {
+      name: 'Ella Fitzgerald',
+      phone: '0498 111 022',
+      email: 'ella.fitz@icloud.com',
+      source: 'walk-in',
+      birthDate: new Date('1987-12-01'),
+      notes: 'Full colour + cut combo every 8 weeks.',
+      hairType: 'wavy',
+      hairTexture: 'medium',
+      naturalColour: 'dark brown',
+      productPreferences: 'Wella Professionals',
+    },
+    {
+      name: 'Nora Sullivan',
+      phone: '0498 111 023',
+      email: 'nora.s@gmail.com',
+      source: 'referral',
+      notes: 'Referred by Emma Wilson. First-time colour client.',
+      hairType: 'straight',
+      hairTexture: 'fine',
+      naturalColour: 'light brown',
+    },
+    {
+      name: 'Luca Martini',
+      phone: '0498 111 024',
+      email: 'luca.m@gmail.com',
+      source: 'google',
+      notes: 'Monthly trim. Prefers Liam.',
+      hairType: 'wavy',
+      hairTexture: 'medium',
+      naturalColour: 'dark brown',
+    },
+    {
+      name: 'Aria Foster',
+      phone: '0498 111 025',
+      email: 'aria.f@outlook.com',
+      source: 'instagram',
+      birthDate: new Date('1995-05-20'),
+      notes: 'Colour correction history — bleach damage. Patience required.',
+      hairType: 'straight',
+      hairTexture: 'fine',
+      naturalColour: 'dark blonde',
+      allergies: 'Ammonia-based dyes',
+      productPreferences: 'Olaplex 0-3 home care',
+    },
   ];
 
   const clients = [];
@@ -321,20 +474,87 @@ async function main() {
     return d;
   }
 
-  // Past bookings (completed)
+  // Past bookings — last 60 days (COMPLETED, some CANCELLED/NO_SHOW)
   const pastBookings = [
-    { client: 0, stylist: 0, service: 0, day: -7, hour: 9, status: 'COMPLETED' as const },
-    { client: 1, stylist: 1, service: 8, day: -7, hour: 10, status: 'COMPLETED' as const },
-    { client: 2, stylist: 2, service: 1, day: -6, hour: 14, status: 'COMPLETED' as const },
-    { client: 3, stylist: 3, service: 10, day: -5, hour: 9, status: 'COMPLETED' as const },
-    { client: 4, stylist: 0, service: 5, day: -4, hour: 11, status: 'COMPLETED' as const },
-    { client: 5, stylist: 1, service: 0, day: -3, hour: 15, status: 'COMPLETED' as const },
-    { client: 6, stylist: 0, service: 5, day: -2, hour: 10, status: 'COMPLETED' as const },
-    { client: 10, stylist: 2, service: 1, day: -2, hour: 11, status: 'COMPLETED' as const },
-    { client: 7, stylist: 3, service: 11, day: -1, hour: 9, status: 'COMPLETED' as const },
-    { client: 8, stylist: 1, service: 8, day: -1, hour: 13, status: 'COMPLETED' as const },
-    // One no-show and one cancellation
+    // ~60 days ago (Fri)
+    { client: 12, stylist: 1, service: 8, day: -60, hour: 9, status: 'COMPLETED' as const },
+    { client: 13, stylist: 3, service: 11, day: -60, hour: 10, status: 'COMPLETED' as const },
+    { client: 14, stylist: 0, service: 5, day: -60, hour: 14, status: 'COMPLETED' as const },
+    // ~55 days ago (Wed)
+    { client: 0, stylist: 0, service: 0, day: -55, hour: 9, status: 'COMPLETED' as const },
+    { client: 15, stylist: 3, service: 12, day: -55, hour: 11, status: 'COMPLETED' as const },
+    { client: 16, stylist: 1, service: 6, day: -55, hour: 14, status: 'COMPLETED' as const },
+    // ~49 days ago (Sat — peak)
+    { client: 1, stylist: 1, service: 8, day: -49, hour: 9, status: 'COMPLETED' as const },
+    { client: 2, stylist: 2, service: 1, day: -49, hour: 10, status: 'COMPLETED' as const },
+    { client: 17, stylist: 0, service: 5, day: -49, hour: 11, status: 'COMPLETED' as const },
+    { client: 18, stylist: 3, service: 13, day: -49, hour: 13, status: 'COMPLETED' as const },
+    { client: 19, stylist: 1, service: 0, day: -49, hour: 14, status: 'COMPLETED' as const },
+    // ~48 days ago (Fri)
+    { client: 3, stylist: 3, service: 10, day: -48, hour: 9, status: 'COMPLETED' as const },
+    { client: 20, stylist: 0, service: 7, day: -48, hour: 11, status: 'COMPLETED' as const },
+    { client: 21, stylist: 1, service: 3, day: -48, hour: 15, status: 'COMPLETED' as const },
+    // ~42 days ago (Sat)
+    { client: 4, stylist: 0, service: 5, day: -42, hour: 9, status: 'COMPLETED' as const },
+    { client: 22, stylist: 1, service: 8, day: -42, hour: 10, status: 'COMPLETED' as const },
+    { client: 23, stylist: 3, service: 11, day: -42, hour: 13, status: 'COMPLETED' as const },
+    { client: 5, stylist: 2, service: 1, day: -42, hour: 14, status: 'COMPLETED' as const },
+    // ~41 days ago (Fri)
+    { client: 24, stylist: 0, service: 0, day: -41, hour: 10, status: 'COMPLETED' as const },
+    { client: 6, stylist: 1, service: 6, day: -41, hour: 14, status: 'CANCELLED' as const },
+    // ~35 days ago (Sat)
+    { client: 7, stylist: 3, service: 11, day: -35, hour: 9, status: 'COMPLETED' as const },
+    { client: 8, stylist: 1, service: 8, day: -35, hour: 10, status: 'COMPLETED' as const },
+    { client: 12, stylist: 0, service: 5, day: -35, hour: 13, status: 'COMPLETED' as const },
+    { client: 14, stylist: 2, service: 1, day: -35, hour: 14, status: 'COMPLETED' as const },
+    // ~34 days ago (Fri)
+    { client: 9, stylist: 0, service: 3, day: -34, hour: 9, status: 'COMPLETED' as const },
+    { client: 15, stylist: 1, service: 0, day: -34, hour: 11, status: 'NO_SHOW' as const },
+    { client: 16, stylist: 3, service: 12, day: -34, hour: 14, status: 'COMPLETED' as const },
+    // ~28 days ago (Sat)
+    { client: 10, stylist: 2, service: 1, day: -28, hour: 9, status: 'COMPLETED' as const },
+    { client: 17, stylist: 0, service: 7, day: -28, hour: 10, status: 'COMPLETED' as const },
+    { client: 18, stylist: 1, service: 8, day: -28, hour: 11, status: 'COMPLETED' as const },
+    { client: 19, stylist: 3, service: 13, day: -28, hour: 13, status: 'COMPLETED' as const },
+    // ~27 days ago (Fri)
+    { client: 11, stylist: 2, service: 1, day: -27, hour: 9, status: 'COMPLETED' as const },
+    { client: 20, stylist: 0, service: 5, day: -27, hour: 11, status: 'CANCELLED' as const },
+    { client: 21, stylist: 1, service: 3, day: -27, hour: 14, status: 'COMPLETED' as const },
+    // ~21 days ago (Sat)
+    { client: 0, stylist: 0, service: 5, day: -21, hour: 9, status: 'COMPLETED' as const },
+    { client: 22, stylist: 1, service: 8, day: -21, hour: 10, status: 'COMPLETED' as const },
+    { client: 23, stylist: 3, service: 11, day: -21, hour: 11, status: 'COMPLETED' as const },
+    { client: 24, stylist: 2, service: 1, day: -21, hour: 13, status: 'COMPLETED' as const },
+    { client: 1, stylist: 0, service: 9, day: -21, hour: 15, status: 'COMPLETED' as const },
+    // ~20 days ago (Fri)
+    { client: 13, stylist: 1, service: 6, day: -20, hour: 10, status: 'COMPLETED' as const },
+    { client: 2, stylist: 3, service: 10, day: -20, hour: 13, status: 'COMPLETED' as const },
+    // ~14 days ago (Sat)
+    { client: 3, stylist: 0, service: 5, day: -14, hour: 9, status: 'COMPLETED' as const },
+    { client: 4, stylist: 1, service: 8, day: -14, hour: 10, status: 'COMPLETED' as const },
+    { client: 14, stylist: 3, service: 12, day: -14, hour: 11, status: 'COMPLETED' as const },
+    { client: 15, stylist: 2, service: 1, day: -14, hour: 13, status: 'COMPLETED' as const },
+    { client: 16, stylist: 0, service: 0, day: -14, hour: 15, status: 'NO_SHOW' as const },
+    // ~13 days ago (Fri)
+    { client: 5, stylist: 1, service: 0, day: -13, hour: 9, status: 'COMPLETED' as const },
+    { client: 6, stylist: 0, service: 5, day: -13, hour: 11, status: 'COMPLETED' as const },
+    { client: 17, stylist: 3, service: 13, day: -13, hour: 14, status: 'COMPLETED' as const },
+    // ~7 days ago (Sat)
+    { client: 7, stylist: 0, service: 5, day: -7, hour: 9, status: 'COMPLETED' as const },
+    { client: 8, stylist: 1, service: 8, day: -7, hour: 10, status: 'COMPLETED' as const },
+    { client: 18, stylist: 2, service: 1, day: -7, hour: 11, status: 'COMPLETED' as const },
+    { client: 19, stylist: 3, service: 11, day: -7, hour: 13, status: 'COMPLETED' as const },
+    // ~6 days ago (Fri)
+    { client: 9, stylist: 0, service: 3, day: -6, hour: 10, status: 'COMPLETED' as const },
+    { client: 20, stylist: 1, service: 6, day: -6, hour: 13, status: 'COMPLETED' as const },
+    { client: 21, stylist: 3, service: 12, day: -6, hour: 15, status: 'CANCELLED' as const },
+    // earlier this week
+    { client: 10, stylist: 2, service: 1, day: -4, hour: 9, status: 'COMPLETED' as const },
+    { client: 22, stylist: 0, service: 5, day: -4, hour: 11, status: 'COMPLETED' as const },
     { client: 11, stylist: 2, service: 1, day: -3, hour: 10, status: 'NO_SHOW' as const },
+    { client: 23, stylist: 1, service: 0, day: -3, hour: 14, status: 'COMPLETED' as const },
+    { client: 24, stylist: 3, service: 13, day: -2, hour: 9, status: 'COMPLETED' as const },
+    { client: 12, stylist: 0, service: 5, day: -2, hour: 11, status: 'COMPLETED' as const },
     { client: 9, stylist: 0, service: 3, day: -1, hour: 16, status: 'CANCELLED' as const },
   ];
 
@@ -343,24 +563,30 @@ async function main() {
     { client: 0, stylist: 0, service: 0, day: 0, hour: 9, status: 'COMPLETED' as const },
     { client: 2, stylist: 2, service: 1, day: 0, hour: 10, status: 'IN_PROGRESS' as const },
     { client: 6, stylist: 1, service: 6, day: 0, hour: 10, status: 'IN_PROGRESS' as const },
+    { client: 13, stylist: 3, service: 11, day: 0, hour: 11, status: 'IN_PROGRESS' as const },
     { client: 5, stylist: 0, service: 3, day: 0, hour: 14, status: 'CONFIRMED' as const },
     { client: 8, stylist: 3, service: 12, day: 0, hour: 14, status: 'CONFIRMED' as const },
     { client: 10, stylist: 2, service: 1, day: 0, hour: 15, status: 'CONFIRMED' as const },
   ];
 
-  // Upcoming bookings
+  // Upcoming bookings — next 30 days (peak Fri/Sat, lighter Mon)
   const upcomingBookings = [
+    // +1 day
     { client: 1, stylist: 1, service: 8, day: 1, hour: 10, status: 'CONFIRMED' as const },
     { client: 3, stylist: 3, service: 11, day: 1, hour: 11, status: 'CONFIRMED' as const },
     { client: 4, stylist: 0, service: 5, day: 1, hour: 14, status: 'CONFIRMED' as const },
+    // +2
     { client: 9, stylist: 0, service: 0, day: 2, hour: 9, status: 'CONFIRMED' as const },
     { client: 7, stylist: 1, service: 3, day: 2, hour: 11, status: 'CONFIRMED' as const },
     { client: 11, stylist: 2, service: 1, day: 2, hour: 14, status: 'CONFIRMED' as const },
+    // +3
     { client: 0, stylist: 0, service: 5, day: 3, hour: 10, status: 'PENDING' as const },
     { client: 5, stylist: 3, service: 12, day: 3, hour: 13, status: 'PENDING' as const },
+    // +4 (Fri)
     { client: 8, stylist: 1, service: 0, day: 4, hour: 9, status: 'CONFIRMED' as const },
-    { client: 2, stylist: 2, service: 1, day: 5, hour: 15, status: 'CONFIRMED' as const },
-    // Guest booking (no client)
+    { client: 14, stylist: 0, service: 7, day: 4, hour: 10, status: 'CONFIRMED' as const },
+    { client: 15, stylist: 3, service: 13, day: 4, hour: 13, status: 'CONFIRMED' as const },
+    { client: 16, stylist: 1, service: 6, day: 4, hour: 15, status: 'CONFIRMED' as const },
     {
       client: -1,
       stylist: 0,
@@ -371,6 +597,44 @@ async function main() {
       guestName: 'Sarah K.',
       guestPhone: '0400 999 111',
     },
+    // +5 (Sat — peak)
+    { client: 2, stylist: 2, service: 1, day: 5, hour: 9, status: 'CONFIRMED' as const },
+    { client: 17, stylist: 0, service: 5, day: 5, hour: 10, status: 'CONFIRMED' as const },
+    { client: 18, stylist: 1, service: 8, day: 5, hour: 11, status: 'CONFIRMED' as const },
+    { client: 19, stylist: 3, service: 11, day: 5, hour: 13, status: 'PENDING' as const },
+    // +7 (Mon — light)
+    { client: 20, stylist: 2, service: 1, day: 7, hour: 10, status: 'CONFIRMED' as const },
+    // +8
+    { client: 21, stylist: 0, service: 0, day: 8, hour: 9, status: 'CONFIRMED' as const },
+    { client: 22, stylist: 1, service: 3, day: 8, hour: 11, status: 'CONFIRMED' as const },
+    // +11 (Fri)
+    { client: 23, stylist: 0, service: 5, day: 11, hour: 10, status: 'CONFIRMED' as const },
+    { client: 24, stylist: 1, service: 8, day: 11, hour: 13, status: 'CONFIRMED' as const },
+    { client: 12, stylist: 3, service: 12, day: 11, hour: 15, status: 'PENDING' as const },
+    // +12 (Sat)
+    { client: 0, stylist: 0, service: 7, day: 12, hour: 9, status: 'CONFIRMED' as const },
+    { client: 1, stylist: 1, service: 8, day: 12, hour: 10, status: 'CONFIRMED' as const },
+    { client: 13, stylist: 2, service: 1, day: 12, hour: 11, status: 'CONFIRMED' as const },
+    { client: 3, stylist: 3, service: 11, day: 12, hour: 14, status: 'PENDING' as const },
+    // +14 (Mon)
+    { client: 6, stylist: 2, service: 1, day: 14, hour: 11, status: 'CONFIRMED' as const },
+    // +18 (Fri)
+    { client: 4, stylist: 0, service: 5, day: 18, hour: 10, status: 'CONFIRMED' as const },
+    { client: 7, stylist: 1, service: 6, day: 18, hour: 13, status: 'CONFIRMED' as const },
+    { client: 14, stylist: 3, service: 13, day: 18, hour: 15, status: 'PENDING' as const },
+    // +19 (Sat)
+    { client: 15, stylist: 0, service: 0, day: 19, hour: 9, status: 'CONFIRMED' as const },
+    { client: 16, stylist: 1, service: 8, day: 19, hour: 10, status: 'CONFIRMED' as const },
+    { client: 17, stylist: 3, service: 11, day: 19, hour: 11, status: 'PENDING' as const },
+    // +25 (Fri)
+    { client: 18, stylist: 0, service: 5, day: 25, hour: 10, status: 'PENDING' as const },
+    { client: 19, stylist: 1, service: 3, day: 25, hour: 13, status: 'PENDING' as const },
+    // +26 (Sat)
+    { client: 20, stylist: 2, service: 1, day: 26, hour: 9, status: 'PENDING' as const },
+    { client: 21, stylist: 0, service: 7, day: 26, hour: 11, status: 'PENDING' as const },
+    { client: 22, stylist: 1, service: 8, day: 26, hour: 14, status: 'PENDING' as const },
+    // +28 (Mon — light)
+    { client: 23, stylist: 3, service: 12, day: 28, hour: 11, status: 'PENDING' as const },
   ];
 
   const allBookings = [...pastBookings, ...todayBookings, ...upcomingBookings];
@@ -394,6 +658,377 @@ async function main() {
         salonId: salon.id,
         cancelledAt: b.status === 'CANCELLED' ? new Date() : null,
         cancelReason: b.status === 'CANCELLED' ? 'Client requested reschedule' : null,
+      },
+    });
+  }
+
+  // ── Recurring Bookings ──────────────────────────────────────
+  const recurringData = [
+    // weekly
+    {
+      client: 10,
+      stylist: 2,
+      service: 1,
+      intervalWeeks: 1,
+      dayOfWeek: 2,
+      time: '10:00',
+      nextDays: 7,
+    },
+    {
+      client: 6,
+      stylist: 0,
+      service: 5,
+      intervalWeeks: 1,
+      dayOfWeek: 4,
+      time: '11:00',
+      nextDays: 4,
+    },
+    {
+      client: 5,
+      stylist: 1,
+      service: 0,
+      intervalWeeks: 1,
+      dayOfWeek: 3,
+      time: '09:00',
+      nextDays: 10,
+    },
+    {
+      client: 19,
+      stylist: 3,
+      service: 12,
+      intervalWeeks: 1,
+      dayOfWeek: 5,
+      time: '14:00',
+      nextDays: 5,
+    },
+    // fortnightly
+    {
+      client: 11,
+      stylist: 2,
+      service: 1,
+      intervalWeeks: 2,
+      dayOfWeek: 2,
+      time: '11:00',
+      nextDays: 8,
+    },
+    {
+      client: 16,
+      stylist: 1,
+      service: 6,
+      intervalWeeks: 2,
+      dayOfWeek: 4,
+      time: '15:00',
+      nextDays: 11,
+    },
+    {
+      client: 22,
+      stylist: 0,
+      service: 7,
+      intervalWeeks: 2,
+      dayOfWeek: 6,
+      time: '10:00',
+      nextDays: 12,
+    },
+    {
+      client: 23,
+      stylist: 1,
+      service: 8,
+      intervalWeeks: 2,
+      dayOfWeek: 5,
+      time: '09:00',
+      nextDays: 18,
+    },
+  ];
+
+  for (const r of recurringData) {
+    await prisma.recurringBooking.create({
+      data: {
+        intervalWeeks: r.intervalWeeks,
+        dayOfWeek: r.dayOfWeek,
+        preferredTime: r.time,
+        isActive: true,
+        nextRunDate: addDays(today, r.nextDays),
+        clientId: clients[r.client].id,
+        serviceId: services[r.service].id,
+        stylistId: stylists[r.stylist].id,
+        salonId: salon.id,
+      },
+    });
+  }
+
+  // ── Waitlist Entries ─────────────────────────────────────────
+  const waitlistData = [
+    {
+      client: 14,
+      service: 8,
+      stylist: 1,
+      status: 'WAITING' as const,
+      prefStart: addDays(today, 3),
+      prefEnd: addDays(today, 14),
+      prefTimeStart: '09:00',
+      prefTimeEnd: '13:00',
+      expiresAt: addDays(today, 14),
+    },
+    {
+      client: 20,
+      service: 5,
+      stylist: 0,
+      status: 'WAITING' as const,
+      prefStart: addDays(today, 1),
+      prefEnd: addDays(today, 10),
+      prefTimeStart: '10:00',
+      prefTimeEnd: '17:00',
+      expiresAt: addDays(today, 10),
+    },
+    {
+      client: 24,
+      service: 10,
+      stylist: null,
+      status: 'NOTIFIED' as const,
+      prefStart: addDays(today, 1),
+      prefEnd: addDays(today, 7),
+      prefTimeStart: '09:00',
+      prefTimeEnd: '12:00',
+      notifiedAt: addDays(today, -1),
+      expiresAt: addDays(today, 7),
+    },
+    {
+      client: 18,
+      service: 11,
+      stylist: 3,
+      status: 'NOTIFIED' as const,
+      prefStart: addDays(today, 2),
+      prefEnd: addDays(today, 9),
+      prefTimeStart: null,
+      prefTimeEnd: null,
+      notifiedAt: addDays(today, -2),
+      expiresAt: addDays(today, 9),
+    },
+    {
+      client: 9,
+      service: 7,
+      stylist: null,
+      status: 'EXPIRED' as const,
+      prefStart: addDays(today, -14),
+      prefEnd: addDays(today, -7),
+      prefTimeStart: '14:00',
+      prefTimeEnd: '18:00',
+      expiresAt: addDays(today, -7),
+    },
+    {
+      client: 3,
+      service: 8,
+      stylist: 1,
+      status: 'EXPIRED' as const,
+      prefStart: addDays(today, -21),
+      prefEnd: addDays(today, -14),
+      prefTimeStart: '09:00',
+      prefTimeEnd: '17:00',
+      expiresAt: addDays(today, -14),
+    },
+  ];
+
+  for (const w of waitlistData) {
+    await prisma.waitlistEntry.create({
+      data: {
+        status: w.status,
+        preferredDateStart: w.prefStart,
+        preferredDateEnd: w.prefEnd,
+        preferredTimeStart: w.prefTimeStart ?? null,
+        preferredTimeEnd: w.prefTimeEnd ?? null,
+        notifiedAt: 'notifiedAt' in w ? w.notifiedAt : null,
+        expiresAt: w.expiresAt,
+        clientId: clients[w.client].id,
+        serviceId: services[w.service].id,
+        stylistId: w.stylist !== null ? stylists[w.stylist].id : null,
+        salonId: salon.id,
+      },
+    });
+  }
+
+  // ── SMS Logs ─────────────────────────────────────────────────
+  // Collect the created bookings so we can tie SMS to them
+  const createdBookings = await prisma.booking.findMany({
+    where: { salonId: salon.id },
+    orderBy: { startTime: 'asc' },
+    take: 30,
+  });
+
+  const smsOutbound = [
+    // outbound reminders tied to past bookings
+    {
+      daysAgo: 29,
+      clientIdx: 12,
+      msg: 'Hi Chloe, reminder for your appt tomorrow at 9:00am with Jade. Reply YES to confirm or call us to reschedule.',
+      bookingIdx: 0,
+    },
+    {
+      daysAgo: 27,
+      clientIdx: 13,
+      msg: 'Hi Sophie, reminder for your appointment tomorrow at 10:00am with Sophie Chen. See you then! 💇',
+      bookingIdx: 1,
+    },
+    {
+      daysAgo: 26,
+      clientIdx: 0,
+      msg: 'Hi Emma, just a reminder you have a booking tomorrow at 9:00am with Maria. Reply YES to confirm.',
+      bookingIdx: 2,
+    },
+    {
+      daysAgo: 20,
+      clientIdx: 4,
+      msg: 'Hi Isla, reminder for your Full Colour appointment tomorrow at 11:00am with Maria. Reply YES to confirm.',
+      bookingIdx: 3,
+    },
+    {
+      daysAgo: 19,
+      clientIdx: 16,
+      msg: 'Hi Mila, your Half Head Foils appt is tomorrow at 2:00pm with Jade. Reply YES to confirm or call to reschedule.',
+      bookingIdx: 4,
+    },
+    {
+      daysAgo: 13,
+      clientIdx: 3,
+      msg: "Hi Amelia, reminder for tomorrow's Colour Correction at 9:00am with Sophie. See you soon!",
+      bookingIdx: 5,
+    },
+    {
+      daysAgo: 12,
+      clientIdx: 17,
+      msg: 'Hi Penelope, just a reminder you have Balayage tomorrow at 11:00am with Maria. Reply YES to confirm.',
+      bookingIdx: 6,
+    },
+    {
+      daysAgo: 6,
+      clientIdx: 7,
+      msg: 'Hi Zoe, reminder for your Keratin Treatment tomorrow at 9:00am with Sophie. Reply YES to confirm.',
+      bookingIdx: 7,
+    },
+    {
+      daysAgo: 5,
+      clientIdx: 8,
+      msg: 'Hi Lily, your Balayage is tomorrow at 10:00am with Jade. Looking forward to seeing you!',
+      bookingIdx: 8,
+    },
+    {
+      daysAgo: 4,
+      clientIdx: 18,
+      msg: 'Hi Sienna, reminder for your Scalp Treatment tomorrow at 1:00pm with Sophie. Reply YES to confirm.',
+      bookingIdx: 9,
+    },
+    {
+      daysAgo: 3,
+      clientIdx: 19,
+      msg: 'Hi Hannah, just a quick reminder — appointment tomorrow at 3:00pm with Sophie. Reply YES to confirm.',
+      bookingIdx: 10,
+    },
+    {
+      daysAgo: 2,
+      clientIdx: 10,
+      msg: "Hi Ella, reminder for tomorrow's Women's Cut & Blow Dry at 11:00am with Liam. See you soon!",
+      bookingIdx: 11,
+    },
+    {
+      daysAgo: 2,
+      clientIdx: 22,
+      msg: 'Hi Nora, Maria is looking forward to seeing you tomorrow at 11:00am for your Full Colour. Reply YES to confirm.',
+      bookingIdx: 12,
+    },
+    {
+      daysAgo: 1,
+      clientIdx: 24,
+      msg: 'Hi Aria, reminder for your Scalp Treatment today at 9:00am with Sophie. See you shortly!',
+      bookingIdx: 13,
+    },
+    {
+      daysAgo: 1,
+      clientIdx: 12,
+      msg: 'Hi Chloe, reminder: Full Colour today at 11:00am with Maria. Looking forward to it!',
+      bookingIdx: 14,
+    },
+    // upcoming reminders (sent yesterday/today for tomorrow appts)
+    {
+      daysAgo: 0,
+      clientIdx: 1,
+      msg: 'Hi Olivia, reminder for your Balayage tomorrow at 10:00am with Jade. Reply YES to confirm.',
+      bookingIdx: 15,
+    },
+    {
+      daysAgo: 0,
+      clientIdx: 3,
+      msg: 'Hi Amelia, reminder for your Keratin Treatment tomorrow at 11:00am with Sophie. Reply YES to confirm.',
+      bookingIdx: 16,
+    },
+    {
+      daysAgo: 0,
+      clientIdx: 4,
+      msg: 'Hi Isla, your Full Colour is tomorrow at 2:00pm with Maria. Looking forward to seeing you!',
+      bookingIdx: 17,
+    },
+    // delivery confirmations (treated as additional outbound status records)
+    {
+      daysAgo: 29,
+      clientIdx: 12,
+      msg: '[Delivered] Reminder sent to Chloe Nguyen.',
+      bookingIdx: 0,
+      status: 'delivered',
+    },
+    {
+      daysAgo: 20,
+      clientIdx: 4,
+      msg: '[Delivered] Reminder sent to Isla Martinez.',
+      bookingIdx: 3,
+      status: 'delivered',
+    },
+    {
+      daysAgo: 6,
+      clientIdx: 7,
+      msg: '[Delivered] Reminder sent to Zoe Patel.',
+      bookingIdx: 7,
+      status: 'delivered',
+    },
+  ];
+
+  const smsInbound = [
+    { daysAgo: 28, clientIdx: 12, msg: 'YES confirmed thanks!', bookingIdx: 0 },
+    { daysAgo: 19, clientIdx: 16, msg: 'Yes confirmed', bookingIdx: 4 },
+    { daysAgo: 11, clientIdx: 17, msg: 'Yes see you then', bookingIdx: 6 },
+    { daysAgo: 4, clientIdx: 7, msg: 'Need to reschedule sorry', bookingIdx: 7 },
+    { daysAgo: 3, clientIdx: 19, msg: 'Yes confirmed 👍', bookingIdx: 10 },
+    { daysAgo: 1, clientIdx: 24, msg: 'Yes will be there', bookingIdx: 13 },
+    { daysAgo: 0, clientIdx: 1, msg: 'Yes confirmed', bookingIdx: 15 },
+    { daysAgo: 0, clientIdx: 3, msg: 'Can we move to 12pm instead?', bookingIdx: 16 },
+  ];
+
+  for (const s of smsOutbound) {
+    const createdAt = new Date(Date.now() - s.daysAgo * 86400000);
+    await prisma.smsLog.create({
+      data: {
+        direction: 'OUTBOUND',
+        phone: clients[s.clientIdx].phone ?? '0400000000',
+        body: s.msg,
+        status: s.status ?? 'sent',
+        twilioSid: `SM${Math.random().toString(36).slice(2, 34).toUpperCase()}`,
+        clientId: clients[s.clientIdx].id,
+        bookingId: createdBookings[s.bookingIdx]?.id ?? null,
+        salonId: salon.id,
+        createdAt,
+      },
+    });
+  }
+
+  for (const s of smsInbound) {
+    const createdAt = new Date(Date.now() - s.daysAgo * 86400000 + 3600000);
+    await prisma.smsLog.create({
+      data: {
+        direction: 'INBOUND',
+        phone: clients[s.clientIdx].phone ?? '0400000000',
+        body: s.msg,
+        status: 'received',
+        clientId: clients[s.clientIdx].id,
+        bookingId: createdBookings[s.bookingIdx]?.id ?? null,
+        salonId: salon.id,
+        createdAt,
       },
     });
   }
