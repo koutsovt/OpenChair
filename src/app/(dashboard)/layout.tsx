@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { Sidebar } from '@/components/layout/sidebar';
 import { Header } from '@/components/layout/header';
+import { DemoBanner } from '@/components/layout/DemoBanner';
 import {
   buildThemeCssVars,
   buildGoogleFontsUrl,
@@ -44,6 +45,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       {cssVars && (
         <style dangerouslySetInnerHTML={{ __html: `#salon-theme-scope { ${cssVars} }` }} />
       )}
+      <DemoBanner userEmail={user.email} />
       <div id="salon-theme-scope" className={cn('flex min-h-screen', isDark && 'dark')}>
         <aside className="hidden w-64 border-r bg-background lg:block">
           <div className="px-6 py-4">
