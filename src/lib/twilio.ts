@@ -2,6 +2,7 @@ import twilio from 'twilio';
 import { env } from '@/lib/env';
 import { prisma } from '@/lib/prisma';
 import { loadTwilioCredentials } from '@/lib/credentials';
+import { log } from '@/lib/logger';
 
 function isDevMode(): boolean {
   return (
@@ -33,8 +34,7 @@ export async function sendSMS(
   body: string
 ): Promise<{ success: boolean; sid?: string; error?: string }> {
   if (isDevMode()) {
-    // eslint-disable-next-line no-console
-    console.info(`[SMS-DEV] To: ${to}\n${body}`);
+    log.info({ to, body }, '[SMS-DEV] skipping real send in dev/placeholder mode');
     return { success: true, sid: `dev_${Date.now()}` };
   }
 
@@ -48,8 +48,7 @@ export async function sendSMS(
     return { success: true, sid: message.sid };
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Failed to send SMS';
-    // eslint-disable-next-line no-console
-    console.error('Twilio SMS error:', msg);
+    log.error({ err: error, to }, 'Twilio SMS send failed');
     return { success: false, error: msg };
   }
 }
