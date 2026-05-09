@@ -1,6 +1,7 @@
 import twilio from 'twilio';
 import { env } from '@/lib/env';
 import { prisma } from '@/lib/prisma';
+import { loadTwilioCredentials } from '@/lib/credentials';
 
 function isDevMode(): boolean {
   return (
@@ -10,7 +11,22 @@ function isDevMode(): boolean {
   );
 }
 
-const getTwilioClient = () => twilio(env.TWILIO_ACCOUNT_SID, env.TWILIO_AUTH_TOKEN);
+/**
+ * Returns a fully-validated Twilio credentials object. Throws with a clear
+ * message if any field is blank — no silent undefined fields.
+ */
+function getTwilioCredentials() {
+  return loadTwilioCredentials(
+    env.TWILIO_ACCOUNT_SID,
+    env.TWILIO_AUTH_TOKEN,
+    env.TWILIO_PHONE_NUMBER
+  );
+}
+
+const getTwilioClient = () => {
+  const creds = getTwilioCredentials();
+  return twilio(creds.accountSid, creds.authToken);
+};
 
 export async function sendSMS(
   to: string,
@@ -23,9 +39,10 @@ export async function sendSMS(
   }
 
   try {
+    const creds = getTwilioCredentials();
     const message = await getTwilioClient().messages.create({
       body,
-      from: env.TWILIO_PHONE_NUMBER,
+      from: creds.fromNumber,
       to,
     });
     return { success: true, sid: message.sid };
@@ -43,7 +60,8 @@ export function validateTwilioSignature(
   signature: string
 ): boolean {
   if (isDevMode()) return true;
-  return twilio.validateRequest(env.TWILIO_AUTH_TOKEN, signature, url, params);
+  const creds = getTwilioCredentials();
+  return twilio.validateRequest(creds.authToken, signature, url, params);
 }
 
 export async function logSms(data: {
