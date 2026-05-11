@@ -23,9 +23,13 @@ export default function SignUpPage() {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     startTransition(async () => {
-      const result = await signUp(formData);
-      if (result?.error) {
-        toast.error(result.error);
+      try {
+        const result = await signUp(formData);
+        if (result?.error) {
+          toast.error(result.error);
+        }
+      } catch {
+        toast.error('Something went wrong. Please try again.');
       }
     });
   }

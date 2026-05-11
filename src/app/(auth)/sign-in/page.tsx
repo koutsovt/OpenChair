@@ -32,17 +32,22 @@ export default function SignInPage() {
     const email = demoMode ? DEMO_EMAIL : (formData.get('email') as string);
     const password = demoMode ? DEMO_PASSWORD : (formData.get('password') as string);
 
-    const result = await signIn('credentials', {
-      email,
-      password,
-      redirect: false,
-    });
+    try {
+      const result = await signIn('credentials', {
+        email,
+        password,
+        redirect: false,
+      });
 
-    if (result?.error) {
-      toast.error('Invalid email or password');
+      if (result?.error) {
+        toast.error('Invalid email or password');
+        setIsPending(false);
+      } else {
+        window.location.href = '/dashboard';
+      }
+    } catch {
+      toast.error('Something went wrong. Please try again.');
       setIsPending(false);
-    } else {
-      window.location.href = '/dashboard';
     }
   }
 
