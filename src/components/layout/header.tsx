@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { LogOut, Menu } from 'lucide-react';
@@ -34,10 +34,6 @@ export function Header({ salonName, userInitials, userEmail, logoUrl }: HeaderPr
     setMobileMenuOpen(false);
   }, [pathname]);
 
-  const closeMobileMenu = useCallback(() => {
-    setMobileMenuOpen(false);
-  }, []);
-
   return (
     <header className="flex h-14 items-center gap-4 border-b bg-background px-4 lg:px-6">
       <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
@@ -47,9 +43,18 @@ export function Header({ salonName, userInitials, userEmail, logoUrl }: HeaderPr
             <span className="sr-only">Toggle menu</span>
           </Button>
         </SheetTrigger>
-        <SheetContent side="left" className="w-64 p-0">
+        <SheetContent
+          side="left"
+          className="w-64 p-0"
+          onClickCapture={(e: React.MouseEvent) => {
+            const anchor = (e.target as HTMLElement).closest('a');
+            if (anchor) {
+              setMobileMenuOpen(false);
+            }
+          }}
+        >
           <SheetTitle className="px-6 pt-6 text-lg font-semibold">OpenChair</SheetTitle>
-          <Sidebar onNavigate={closeMobileMenu} />
+          <Sidebar />
         </SheetContent>
       </Sheet>
 
