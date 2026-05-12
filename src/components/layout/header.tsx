@@ -1,7 +1,10 @@
 'use client';
 
+import { useCallback, useState } from 'react';
 import Image from 'next/image';
+import { usePathname } from 'next/navigation';
 import { LogOut, Menu } from 'lucide-react';
+import { useEffect } from 'react';
 import { signOut } from '@/server/actions/auth';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -24,9 +27,20 @@ interface HeaderProps {
 }
 
 export function Header({ salonName, userInitials, userEmail, logoUrl }: HeaderProps) {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const pathname = usePathname();
+
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [pathname]);
+
+  const closeMobileMenu = useCallback(() => {
+    setMobileMenuOpen(false);
+  }, []);
+
   return (
     <header className="flex h-14 items-center gap-4 border-b bg-background px-4 lg:px-6">
-      <Sheet>
+      <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
         <SheetTrigger asChild>
           <Button variant="ghost" size="icon" className="lg:hidden">
             <Menu className="h-5 w-5" />
@@ -35,7 +49,7 @@ export function Header({ salonName, userInitials, userEmail, logoUrl }: HeaderPr
         </SheetTrigger>
         <SheetContent side="left" className="w-64 p-0">
           <SheetTitle className="px-6 pt-6 text-lg font-semibold">OpenChair</SheetTitle>
-          <Sidebar />
+          <Sidebar onNavigate={closeMobileMenu} />
         </SheetContent>
       </Sheet>
 

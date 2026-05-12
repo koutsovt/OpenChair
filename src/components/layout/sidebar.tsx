@@ -21,16 +21,19 @@ function NavLink({
   label,
   icon: Icon,
   pathname,
+  onClick,
 }: {
   href: string;
   label: string;
   icon: ElementType;
   pathname: string;
+  onClick?: () => void;
 }) {
   const isActive = pathname === href || (href !== '/dashboard' && pathname.startsWith(href));
   return (
     <Link
       href={href}
+      onClick={onClick}
       className={cn(
         'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
         isActive
@@ -44,19 +47,19 @@ function NavLink({
   );
 }
 
-export function Sidebar() {
+export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
   const pathname = usePathname();
 
   return (
     <nav className="flex h-[calc(100vh-4rem)] flex-col gap-1 px-3 py-4">
       <div className="flex flex-col gap-1">
         {navItems.map((item) => (
-          <NavLink key={item.href} {...item} pathname={pathname} />
+          <NavLink key={item.href} {...item} pathname={pathname} onClick={onNavigate} />
         ))}
       </div>
       <div className="mt-auto flex flex-col gap-1 border-t pt-3">
         {bottomNavItems.map((item) => (
-          <NavLink key={item.href} {...item} pathname={pathname} />
+          <NavLink key={item.href} {...item} pathname={pathname} onClick={onNavigate} />
         ))}
       </div>
     </nav>
