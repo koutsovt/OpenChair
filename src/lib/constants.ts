@@ -1,20 +1,30 @@
-export const BOOKING_STATUS_LABELS: Record<string, string> = {
-  PENDING: 'Pending',
-  CONFIRMED: 'Confirmed',
-  IN_PROGRESS: 'In Progress',
-  COMPLETED: 'Completed',
-  CANCELLED: 'Cancelled',
-  NO_SHOW: 'No Show',
-};
+import { bookingStatusStyle } from '@/lib/booking-status-styles';
+import type { BookingStatus } from '@/types';
 
-export const BOOKING_STATUS_COLORS: Record<string, string> = {
-  PENDING: 'bg-yellow-100 text-yellow-800',
-  CONFIRMED: 'bg-blue-100 text-blue-800',
-  IN_PROGRESS: 'bg-purple-100 text-purple-800',
-  COMPLETED: 'bg-green-100 text-green-800',
-  CANCELLED: 'bg-red-100 text-red-800',
-  NO_SHOW: 'bg-gray-100 text-gray-800',
-};
+const STATUSES: BookingStatus[] = [
+  'PENDING',
+  'CONFIRMED',
+  'IN_PROGRESS',
+  'COMPLETED',
+  'CANCELLED',
+  'NO_SHOW',
+];
+
+/**
+ * @deprecated Import from `@/lib/booking-status-styles` directly.
+ * Kept for backward compat — maps status → badge class string.
+ */
+export const BOOKING_STATUS_COLORS: Record<string, string> = Object.fromEntries(
+  STATUSES.map((s) => [s, bookingStatusStyle(s).badge])
+);
+
+/**
+ * @deprecated Import from `@/lib/booking-status-styles` directly.
+ * Kept for backward compat — maps status → human label.
+ */
+export const BOOKING_STATUS_LABELS: Record<string, string> = Object.fromEntries(
+  STATUSES.map((s) => [s, bookingStatusStyle(s).label])
+);
 
 export const DAYS_OF_WEEK = [
   'Sunday',

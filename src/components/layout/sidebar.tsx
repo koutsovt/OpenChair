@@ -3,7 +3,15 @@
 import type { ElementType } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { CalendarDays, LayoutDashboard, Scissors, Settings, Users, UserCog } from 'lucide-react';
+import {
+  CalendarDays,
+  LayoutDashboard,
+  Package,
+  Scissors,
+  Settings,
+  Users,
+  UserCog,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const navItems = [
@@ -12,6 +20,7 @@ const navItems = [
   { href: '/clients', label: 'Clients', icon: Users },
   { href: '/team', label: 'Team', icon: UserCog },
   { href: '/services', label: 'Services', icon: Scissors },
+  { href: '/products', label: 'Products', icon: Package },
 ];
 
 const bottomNavItems = [{ href: '/settings', label: 'Settings', icon: Settings }];

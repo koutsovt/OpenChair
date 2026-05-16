@@ -11,7 +11,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { BOOKING_STATUS_LABELS, BOOKING_STATUS_COLORS } from '@/lib/constants';
+import { bookingStatusStyle } from '@/lib/booking-status-styles';
 import { formatPrice } from '@/lib/utils';
 import { Repeat } from 'lucide-react';
 import { BookingActions } from './booking-actions';
@@ -68,8 +68,8 @@ export function BookingList({ bookings }: { bookings: BookingRow[] }) {
             <TableCell>{b.stylistName}</TableCell>
             <TableCell>{b.price != null ? formatPrice(b.price) : '—'}</TableCell>
             <TableCell>
-              <Badge className={BOOKING_STATUS_COLORS[b.status]} variant="secondary">
-                {BOOKING_STATUS_LABELS[b.status]}
+              <Badge className={bookingStatusStyle(b.status).badge} variant="secondary">
+                {bookingStatusStyle(b.status).label}
               </Badge>
             </TableCell>
             <TableCell>

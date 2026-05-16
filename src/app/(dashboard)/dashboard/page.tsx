@@ -10,7 +10,7 @@ import {
 import { getAuthenticatedSalon } from '@/server/auth';
 import { prisma } from '@/lib/prisma';
 import { formatPrice } from '@/lib/utils';
-import { BOOKING_STATUS_LABELS, BOOKING_STATUS_COLORS } from '@/lib/constants';
+import { bookingStatusStyle } from '@/lib/booking-status-styles';
 import { DashboardShell } from './_components/dashboard-shell';
 
 export default async function DashboardPage() {
@@ -116,8 +116,8 @@ export default async function DashboardPage() {
     clientName: booking.client?.name ?? booking.guestName ?? 'Walk-in',
     stylistName: booking.stylist.name,
     status: booking.status,
-    statusLabel: BOOKING_STATUS_LABELS[booking.status] ?? booking.status,
-    statusColor: BOOKING_STATUS_COLORS[booking.status] ?? '',
+    statusLabel: bookingStatusStyle(booking.status).label,
+    statusColor: bookingStatusStyle(booking.status).badge,
   }));
 
   const stylistStatItems = stylistStats

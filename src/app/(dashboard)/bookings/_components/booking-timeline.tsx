@@ -5,7 +5,7 @@ import { format, differenceInMinutes, addMinutes } from 'date-fns';
 import { UserX } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { BOOKING_STATUS_COLORS } from '@/lib/constants';
+import { bookingStatusStyle } from '@/lib/booking-status-styles';
 import { rescheduleBooking } from '@/server/actions/bookings';
 import { toast } from 'sonner';
 import { ReassignDialog } from './reassign-dialog';
@@ -320,7 +320,7 @@ export function BookingTimeline({
                             draggable={!terminal}
                             onDragStart={(e) => handleDragStart(e, b)}
                             onDragEnd={handleDragEnd}
-                            className={`absolute inset-x-1 overflow-hidden rounded-md border border-black/5 px-2 py-1 shadow-sm ${BOOKING_STATUS_COLORS[b.status]} ${
+                            className={`absolute inset-x-1 overflow-hidden rounded-md border px-2 py-1 shadow-sm ${bookingStatusStyle(b.status).block} ${
                               terminal
                                 ? 'cursor-default opacity-60'
                                 : 'cursor-grab active:cursor-grabbing'

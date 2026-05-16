@@ -8,10 +8,17 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { BOOKING_STATUS_LABELS, BOOKING_STATUS_COLORS } from '@/lib/constants';
+import { bookingStatusStyle } from '@/lib/booking-status-styles';
 import { formatPrice, formatDuration } from '@/lib/utils';
 import { BlurText } from '@/components/ui/blur-text';
 import { BookingDetailActions } from './_components/booking-detail-actions';
+import { ProductsUsedSection } from './_components/products-used-section';
+import {
+  getBookingProducts,
+  getProducts,
+  getClientPreferredProducts,
+  getLastVisitProducts,
+} from '@/server/actions/products';
 
 export default async function BookingDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -42,6 +49,36 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
   if (!booking) notFound();
 
   const clientProfile = booking.client;
+  const clientId = booking.client?.id ?? null;
+
+  const [bookingProductsResult, allProducts, preferredResult, lastVisitResult] = await Promise.all([
+    getBookingProducts(booking.id),
+    getProducts(),
+    clientId ? getClientPreferredProducts(clientId) : Promise.resolve(null),
+    clientId ? getLastVisitProducts({ bookingId: booking.id, clientId }) : Promise.resolve(null),
+  ]);
+
+  const initialBookingProducts = bookingProductsResult.success
+    ? bookingProductsResult.products.map((bp) => ({
+        id: bp.id,
+        product: {
+          brand: bp.product.brand,
+          name: bp.product.name,
+          shadeCode: bp.product.shadeCode,
+        },
+        quantity: bp.quantity,
+        notes: bp.notes,
+      }))
+    : [];
+
+  const hasPreferred =
+    preferredResult && preferredResult.success
+      ? preferredResult.items.some((p) => p.pinned)
+      : false;
+
+  const lastVisitDate =
+    lastVisitResult && lastVisitResult.success ? lastVisitResult.visitDate : null;
+  const hasLastVisit = !!lastVisitDate;
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -54,8 +91,8 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
         <div className="flex-1">
           <BlurText text="Booking Details" className="text-2xl font-bold tracking-tight" />
         </div>
-        <Badge className={BOOKING_STATUS_COLORS[booking.status]} variant="secondary">
-          {BOOKING_STATUS_LABELS[booking.status]}
+        <Badge className={bookingStatusStyle(booking.status).badge} variant="secondary">
+          {bookingStatusStyle(booking.status).label}
         </Badge>
       </div>
 
@@ -166,6 +203,22 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
             </CardContent>
           </Card>
         )}
+
+      {clientId && (
+        <Card>
+          <CardContent className="pt-6">
+            <ProductsUsedSection
+              bookingId={booking.id}
+              clientId={clientId}
+              initialBookingProducts={initialBookingProducts}
+              allProducts={allProducts}
+              hasPreferred={hasPreferred}
+              hasLastVisit={hasLastVisit}
+              lastVisitDate={lastVisitDate}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       <BookingDetailActions bookingId={booking.id} currentStatus={booking.status} />
     </div>

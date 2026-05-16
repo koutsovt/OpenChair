@@ -28,6 +28,7 @@ model User {
   stylist  Stylist?  @relation("StylistUser")
   accounts Account[]
   sessions Session[]
+  clientPreferencesAdded ClientPreferredProduct[]
 
   @@map("users")
 }
@@ -110,11 +111,13 @@ model Salon {
   stylists   Stylist[]
   services   Service[]
   categories ServiceCategory[]
-  clients           Client[]
-  bookings          Booking[]
-  recurringBookings RecurringBooking[]
-  waitlistEntries   WaitlistEntry[]
-  smsLogs           SmsLog[]
+  clients              Client[]
+  bookings             Booking[]
+  recurringBookings    RecurringBooking[]
+  waitlistEntries      WaitlistEntry[]
+  smsLogs              SmsLog[]
+  products             Product[]
+  clientPreferences    ClientPreferredProduct[]
 
   @@index([slug])
   @@map("salons")
@@ -261,6 +264,7 @@ model Client {
   recurringBookings RecurringBooking[]
   waitlistEntries   WaitlistEntry[]
   smsLogs           SmsLog[]
+  preferredProducts ClientPreferredProduct[]
 
   @@index([salonId])
   @@index([phone])
@@ -302,7 +306,8 @@ model Booking {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  smsLogs SmsLog[]
+  smsLogs      SmsLog[]
+  productsUsed BookingProduct[]
 
   @@index([salonId, startTime])
   @@index([stylistId, startTime])
@@ -416,4 +421,95 @@ model SmsLog {
 enum SmsDirection {
   INBOUND
   OUTBOUND
+}
+
+// ============================================================
+// PRODUCTS (Tier 1 — product tracking)
+// ============================================================
+
+enum ProductCategory {
+  COLOUR
+  DEVELOPER
+  SHAMPOO
+  CONDITIONER
+  TREATMENT
+  STYLING
+  OTHER
+}
+
+enum ProductUnit {
+  TUBE
+  BOTTLE
+  SACHET
+  EACH
+}
+
+model Product {
+  id         String          @id @default(cuid())
+  brand      String
+  name       String
+  shadeCode  String?         // e.g. "7/3", "6/45" — null for non-colour products
+  sku        String?
+  category   ProductCategory
+  unit       ProductUnit
+  notes      String?
+  archivedAt DateTime?       // soft-delete; null = active
+
+  salonId String
+  salon   Salon  @relation(fields: [salonId], references: [id], onDelete: Cascade)
+
+  bookingProducts    BookingProduct[]
+  preferredByClients ClientPreferredProduct[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([salonId, brand, name, shadeCode]) // natural dedup key
+  @@index([salonId, category])
+  @@index([salonId, brand])
+  @@index([archivedAt])
+  @@map("products")
+}
+
+model BookingProduct {
+  id        String  @id @default(cuid())
+  bookingId String
+  productId String
+  quantity  Int     @default(1)
+  notes     String? // freetext: "applied to roots only", "mixed with 30vol"
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+
+  @@index([bookingId])
+  @@index([productId])
+  @@map("booking_products")
+}
+
+model ClientPreferredProduct {
+  id        String  @id @default(cuid())
+  clientId  String
+  productId String? // nullable — stylist can save a formula without a catalog product
+  label     String  // e.g. "Base colour", "Toner", "Highlights", "Allergic to"
+  formula   String? // freetext: "60g Wella 7/3 + 60g Wella 9/0 + 20vol, 35min"
+  notes     String? // scalp sensitivity, brand prefs, things to avoid
+  pinned    Boolean @default(true) // pinned = shown prominently; false = collapsed archive
+
+  addedByUserId String?
+  salonId       String
+
+  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  product     Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  addedByUser User?    @relation(fields: [addedByUserId], references: [id], onDelete: SetNull)
+  salon       Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clientId, pinned])  // primary access pattern
+  @@index([clientId, label])
+  @@index([salonId])
+  @@map("client_preferred_products")
 }

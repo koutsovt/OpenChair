@@ -14,7 +14,7 @@ import Link from 'next/link';
 import { getAuthenticatedSalon } from '@/server/auth';
 import { prisma } from '@/lib/prisma';
 import { formatPhone, formatPrice } from '@/lib/utils';
-import { BOOKING_STATUS_LABELS, BOOKING_STATUS_COLORS } from '@/lib/constants';
+import { bookingStatusStyle } from '@/lib/booking-status-styles';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -22,6 +22,13 @@ import { Separator } from '@/components/ui/separator';
 import { EditClientDialog } from '../_components/edit-client-dialog';
 import { DeleteClientButton } from './_components/delete-client-button';
 import { ClientStats } from './_components/client-stats';
+import { PreferredProductsPanel } from './_components/preferred-products-panel';
+import { HairHistoryPanel } from './_components/hair-history-panel';
+import {
+  getClientPreferredProducts,
+  getClientProductHistory,
+  getProducts,
+} from '@/server/actions/products';
 
 interface ClientDetailPageProps {
   params: Promise<{ id: string }>;
@@ -49,7 +56,7 @@ export default async function ClientDetailPage({ params }: ClientDetailPageProps
     notFound();
   }
 
-  const [bookings, stats] = await Promise.all([
+  const [bookings, stats, preferredResult, historyResult, allProducts] = await Promise.all([
     prisma.booking.findMany({
       where: { clientId: client.id },
       include: {
@@ -64,7 +71,49 @@ export default async function ClientDetailPage({ params }: ClientDetailPageProps
       _sum: { price: true },
       _max: { startTime: true },
     }),
+    getClientPreferredProducts(client.id),
+    getClientProductHistory(client.id),
+    getProducts(),
   ]);
+
+  const preferred = preferredResult.success
+    ? preferredResult.items.map((item) => ({
+        id: item.id,
+        productId: item.productId,
+        label: item.label,
+        formula: item.formula,
+        notes: item.notes,
+        pinned: item.pinned,
+        product: item.product
+          ? {
+              brand: item.product.brand,
+              name: item.product.name,
+              shadeCode: item.product.shadeCode,
+            }
+          : undefined,
+      }))
+    : [];
+  const hairHistory = historyResult.success
+    ? historyResult.history.map((h) => ({
+        bookingId: h.booking.id,
+        date: h.booking.startTime,
+        products: [{ product: h.product, quantity: h.quantity, notes: h.notes }],
+      }))
+    : [];
+  // Merge products within the same booking into one visit entry
+  const visitMap = new Map<
+    string,
+    { bookingId: string; date: Date; products: (typeof hairHistory)[number]['products'] }
+  >();
+  for (const row of hairHistory) {
+    const existing = visitMap.get(row.bookingId);
+    if (existing) {
+      existing.products.push(...row.products);
+    } else {
+      visitMap.set(row.bookingId, { ...row, date: new Date(row.date) });
+    }
+  }
+  const visits = Array.from(visitMap.values());
 
   const noShowCount = await prisma.booking.count({
     where: { clientId: client.id, status: 'NO_SHOW' },
@@ -126,6 +175,22 @@ export default async function ClientDetailPage({ params }: ClientDetailPageProps
         lastVisitFormatted={lastVisit ? format(lastVisit, 'dd MMM yyyy') : null}
         noShowCount={noShowCount}
       />
+
+      <Card>
+        <CardContent className="pt-6">
+          <PreferredProductsPanel
+            clientId={client.id}
+            initialPreferred={preferred}
+            allProducts={allProducts}
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="pt-6">
+          <HairHistoryPanel history={visits} />
+        </CardContent>
+      </Card>
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-1">
@@ -246,11 +311,8 @@ export default async function ClientDetailPage({ params }: ClientDetailPageProps
                         {format(booking.startTime, 'h:mm a')} · {booking.stylist.name}
                       </p>
                     </div>
-                    <Badge
-                      variant="secondary"
-                      className={BOOKING_STATUS_COLORS[booking.status] ?? ''}
-                    >
-                      {BOOKING_STATUS_LABELS[booking.status] ?? booking.status}
+                    <Badge variant="secondary" className={bookingStatusStyle(booking.status).badge}>
+                      {bookingStatusStyle(booking.status).label}
                     </Badge>
                   </div>
                 ))}
