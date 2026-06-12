@@ -11,7 +11,9 @@ import {
   updateBookingProductSchema,
   createPreferredProductSchema,
   updatePreferredProductSchema,
+  productNaturalKey,
   type ProductCategoryValue,
+  type ProductUnitValue,
 } from '@/lib/validations/products';
 
 // ============================================================
@@ -197,25 +199,70 @@ export type CsvImportRow = {
   notes?: string;
 };
 
-export type CsvImportResult = {
-  inserted: number;
-  skipped: number;
-  errors: Array<{ row: number; message: string }>;
+export type ImportedProduct = {
+  id: string;
+  brand: string;
+  name: string;
+  shadeCode: string | null;
+  sku: string | null;
+  category: ProductCategoryValue;
+  unit: ProductUnitValue;
+  notes: string | null;
+  archivedAt: string | null;
 };
 
-export async function importProductsCsv(rows: CsvImportRow[]): Promise<CsvImportResult> {
+export type CsvImportResult = {
+  inserted: number;
+  updated: number;
+  skipped: number;
+  errors: Array<{ row: number; message: string }>;
+  /** Inserted + updated rows, serialized for client-side table merge. */
+  products: ImportedProduct[];
+};
+
+type ParsedCsvRow = {
+  brand: string;
+  name: string;
+  shadeCode: string | null;
+  sku: string | null;
+  category: ProductCategoryValue;
+  unit: ProductUnitValue;
+  notes: string | null;
+};
+
+function serializeProduct(p: {
+  id: string;
+  brand: string;
+  name: string;
+  shadeCode: string | null;
+  sku: string | null;
+  category: ProductCategoryValue;
+  unit: ProductUnitValue;
+  notes: string | null;
+  archivedAt: Date | null;
+}): ImportedProduct {
+  return {
+    id: p.id,
+    brand: p.brand,
+    name: p.name,
+    shadeCode: p.shadeCode,
+    sku: p.sku,
+    category: p.category,
+    unit: p.unit,
+    notes: p.notes,
+    archivedAt: p.archivedAt?.toISOString() ?? null,
+  };
+}
+
+export async function importProductsCsv(
+  rows: CsvImportRow[],
+  options?: { updateExisting?: boolean }
+): Promise<CsvImportResult> {
   const salon = await getAuthenticatedSalon();
+  const updateExisting = options?.updateExisting ?? false;
 
   const errors: CsvImportResult['errors'] = [];
-  const validRows: Array<{
-    brand: string;
-    name: string;
-    shadeCode: string | null;
-    sku: string | null;
-    category: ProductCategoryValue;
-    unit: import('@/lib/validations/products').ProductUnitValue;
-    notes: string | null;
-  }> = [];
+  const validRows: ParsedCsvRow[] = [];
 
   // Validate all rows first
   for (let i = 0; i < rows.length; i++) {
@@ -228,12 +275,8 @@ export async function importProductsCsv(rows: CsvImportRow[]): Promise<CsvImport
     const { brand, name, shade_code, sku, category, unit, notes } = parsed.data;
 
     // Dedup within the batch itself
-    const batchDup = validRows.find(
-      (r) =>
-        r.brand.toLowerCase() === brand.toLowerCase() &&
-        r.name.toLowerCase() === name.toLowerCase() &&
-        (r.shadeCode ?? '') === (shade_code ?? '')
-    );
+    const key = productNaturalKey(brand, name, shade_code);
+    const batchDup = validRows.some((r) => productNaturalKey(r.brand, r.name, r.shadeCode) === key);
     if (batchDup) {
       errors.push({
         row: rowNum,
@@ -254,39 +297,60 @@ export async function importProductsCsv(rows: CsvImportRow[]): Promise<CsvImport
   }
 
   if (validRows.length === 0) {
-    return { inserted: 0, skipped: rows.length, errors };
+    return { inserted: 0, updated: 0, skipped: rows.length, errors, products: [] };
   }
 
   // Check against existing products in DB in one query
   const existingProducts = await prisma.product.findMany({
     where: { salonId: salon.id },
-    select: { brand: true, name: true, shadeCode: true },
+    select: { id: true, brand: true, name: true, shadeCode: true },
   });
 
-  const existingSet = new Set(
-    existingProducts.map(
-      (p) => `${p.brand.toLowerCase()}|${p.name.toLowerCase()}|${p.shadeCode ?? ''}`
-    )
+  const existingByKey = new Map(
+    existingProducts.map((p) => [productNaturalKey(p.brand, p.name, p.shadeCode), p.id])
   );
 
-  const toInsert = [];
-  let skipped = rows.length - validRows.length; // invalid rows already skipped
+  const toInsert: Array<ParsedCsvRow & { salonId: string }> = [];
+  const toUpdate: Array<{ id: string; row: ParsedCsvRow }> = [];
 
   for (const row of validRows) {
-    const key = `${row.brand.toLowerCase()}|${row.name.toLowerCase()}|${row.shadeCode ?? ''}`;
-    if (existingSet.has(key)) {
-      skipped++;
+    const existingId = existingByKey.get(productNaturalKey(row.brand, row.name, row.shadeCode));
+    if (existingId) {
+      toUpdate.push({ id: existingId, row });
       continue;
     }
     toInsert.push({ ...row, salonId: salon.id });
   }
 
-  if (toInsert.length > 0) {
-    await prisma.product.createMany({ data: toInsert, skipDuplicates: true });
-  }
+  const inserted =
+    toInsert.length > 0
+      ? await prisma.product.createManyAndReturn({ data: toInsert, skipDuplicates: true })
+      : [];
+
+  // Existing matches: update mutable fields when requested, otherwise skip
+  const updated =
+    updateExisting && toUpdate.length > 0
+      ? await prisma.$transaction(
+          toUpdate.map(({ id, row }) =>
+            prisma.product.update({
+              where: { id },
+              data: { sku: row.sku, category: row.category, unit: row.unit, notes: row.notes },
+            })
+          )
+        )
+      : [];
+
+  const invalidCount = rows.length - validRows.length;
+  const skipped = invalidCount + (updateExisting ? 0 : toUpdate.length);
 
   revalidatePath('/products');
-  return { inserted: toInsert.length, skipped, errors };
+  return {
+    inserted: inserted.length,
+    updated: updated.length,
+    skipped,
+    errors,
+    products: [...inserted, ...updated].map(serializeProduct),
+  };
 }
 
 // ============================================================

@@ -3,6 +3,7 @@
 import { useState, useTransition, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Minus, Plus, Trash2, Pin, Check } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -14,6 +15,7 @@ import {
   updateBookingProduct,
   removeProductFromBooking,
   applyPreferredProductsToBooking,
+  getBookingProducts,
   pinBookingProductToClient,
   repeatLastVisitProducts,
 } from '@/server/actions/products';
@@ -35,6 +37,7 @@ interface ProductsUsedSectionProps {
   hasLastVisit: boolean;
   lastVisitDate: Date | null;
   allProducts: ProductOption[];
+  recentProductIds: string[];
 }
 
 type PinForm = { label: string; formula: string; notes: string };
@@ -48,6 +51,7 @@ export function ProductsUsedSection({
   hasLastVisit,
   lastVisitDate,
   allProducts,
+  recentProductIds,
 }: ProductsUsedSectionProps) {
   const router = useRouter();
   const [items, setItems] = useState<BookingProduct[]>(initialBookingProducts);
@@ -57,27 +61,75 @@ export function ProductsUsedSection({
   const [pinForm, setPinForm] = useState<PinForm>(emptyPin());
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set());
 
+  // router.refresh() alone cannot update `items` (useState keeps its value when
+  // server props change), so bulk additions re-fetch the list explicitly.
+  const refetchItems = async () => {
+    const res = await getBookingProducts(bookingId);
+    if (res.success) {
+      setItems(
+        res.products.map((bp) => ({
+          id: bp.id,
+          product: {
+            brand: bp.product.brand,
+            name: bp.product.name,
+            shadeCode: bp.product.shadeCode,
+          },
+          quantity: bp.quantity,
+          notes: bp.notes,
+        }))
+      );
+    }
+  };
+
   const handleApplyPreferred = () => {
     if (items.length > 0) {
       if (!confirm('This will add preferred products to the existing list. Continue?')) return;
     }
     startTransition(async () => {
-      await applyPreferredProductsToBooking({ bookingId, clientId });
-      router.refresh();
+      const res = await applyPreferredProductsToBooking({ bookingId, clientId });
+      if (!res.success) {
+        toast.error(res.error);
+        return;
+      }
+      if (res.addedCount === 0) {
+        toast.info('No new preferred products to add');
+        return;
+      }
+      await refetchItems();
     });
   };
 
   const handleRepeatLastVisit = () => {
     startTransition(async () => {
-      await repeatLastVisitProducts({ bookingId, clientId });
-      router.refresh();
+      const res = await repeatLastVisitProducts({ bookingId, clientId });
+      if (!res.success) {
+        toast.error(res.error);
+        return;
+      }
+      if (res.addedCount === 0) {
+        toast.info('No new products to add from the last visit');
+        return;
+      }
+      await refetchItems();
     });
   };
 
   const handleSelect = (product: ProductOption) => {
     startTransition(async () => {
-      await addProductToBooking({ bookingId, productId: product.id, quantity: 1 });
-      router.refresh();
+      const res = await addProductToBooking({ bookingId, productId: product.id, quantity: 1 });
+      if (!res.success) {
+        toast.error(res.error);
+        return;
+      }
+      setItems((prev) => [
+        ...prev,
+        {
+          id: res.bookingProductId,
+          product: { brand: product.brand, name: product.name, shadeCode: product.shadeCode },
+          quantity: 1,
+          notes: null,
+        },
+      ]);
     });
   };
 
@@ -100,10 +152,14 @@ export function ProductsUsedSection({
   };
 
   const handleRemove = (id: string) => {
+    const previous = items;
     setItems((prev) => prev.filter((item) => item.id !== id));
     startTransition(async () => {
-      await removeProductFromBooking(id);
-      router.refresh();
+      const res = await removeProductFromBooking(id);
+      if (!res.success) {
+        toast.error(res.error);
+        setItems(previous);
+      }
     });
   };
 
@@ -119,15 +175,20 @@ export function ProductsUsedSection({
   const handleSavePin = (bookingProductId: string) => {
     if (!pinForm.label.trim()) return;
     startTransition(async () => {
-      await pinBookingProductToClient({
+      const res = await pinBookingProductToClient({
         bookingProductId,
         clientId,
         label: pinForm.label.trim(),
         formula: pinForm.formula || undefined,
         notes: pinForm.notes || undefined,
       });
+      if (!res.success) {
+        toast.error(res.error);
+        return;
+      }
       setPinnedIds((prev) => new Set(prev).add(bookingProductId));
       setPinningId(null);
+      // refresh so the hasPreferred prop reflects the new pinned entry
       router.refresh();
     });
   };
@@ -155,7 +216,12 @@ export function ProductsUsedSection({
         </Button>
       </div>
 
-      <ProductCombobox products={allProducts} onSelect={handleSelect} disabled={isPending} />
+      <ProductCombobox
+        products={allProducts}
+        recentProductIds={recentProductIds}
+        onSelect={handleSelect}
+        disabled={isPending}
+      />
 
       {items.length > 0 && (
         <ul className="space-y-2">

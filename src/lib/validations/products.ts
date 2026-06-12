@@ -70,6 +70,73 @@ export const csvProductRowSchema = z.object({
   notes: z.string().optional().or(z.literal('')),
 });
 
+/** Natural dedup key per salon — must match the server-side import logic. */
+export function productNaturalKey(brand: string, name: string, shadeCode?: string | null): string {
+  return `${brand.toLowerCase()}|${name.toLowerCase()}|${shadeCode ?? ''}`;
+}
+
+const SHADELESS_CATEGORIES: readonly ProductCategoryValue[] = [
+  'SHAMPOO',
+  'CONDITIONER',
+  'DEVELOPER',
+  'STYLING',
+  'OTHER',
+];
+
+export type CsvRowValidation = {
+  /** error = will not import; warning = imports, flagged for attention */
+  status: 'valid' | 'warning' | 'error';
+  message: string | null;
+  /** Row matches a product already in the catalog (brand + name + shade_code). */
+  existing: boolean;
+};
+
+/**
+ * Validate parsed CSV rows for the import preview.
+ * `existingKeys` are productNaturalKey() values of products already in the catalog.
+ * Row numbers in messages are CSV line numbers (1-indexed + header row).
+ */
+export function validateCsvRows(
+  rows: Array<Record<string, string | undefined>>,
+  existingKeys: ReadonlySet<string>
+): CsvRowValidation[] {
+  const seenInBatch = new Map<string, number>();
+
+  return rows.map((row, i) => {
+    const parsed = csvProductRowSchema.safeParse(row);
+    if (!parsed.success) {
+      return { status: 'error' as const, message: parsed.error.issues[0].message, existing: false };
+    }
+
+    const { brand, name, shade_code, category } = parsed.data;
+    const key = productNaturalKey(brand, name, shade_code);
+
+    const firstRowNum = seenInBatch.get(key);
+    if (firstRowNum !== undefined) {
+      return {
+        status: 'error' as const,
+        message: `duplicate of row ${firstRowNum} (same brand + name + shade_code)`,
+        existing: false,
+      };
+    }
+    seenInBatch.set(key, i + 2);
+
+    if (existingKeys.has(key)) {
+      return { status: 'warning' as const, message: 'already in catalog', existing: true };
+    }
+
+    if (shade_code && SHADELESS_CATEGORIES.includes(category)) {
+      return {
+        status: 'warning' as const,
+        message: `shade code is unusual for category "${category.toLowerCase()}"`,
+        existing: false,
+      };
+    }
+
+    return { status: 'valid' as const, message: null, existing: false };
+  });
+}
+
 // ============================================================
 // Booking product schemas
 // ============================================================

@@ -22,7 +22,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { productCategoryStyle } from '@/lib/product-category-styles';
-import { PRODUCT_CATEGORY_VALUES, PRODUCT_UNIT_VALUES } from '@/lib/validations/products';
+import { PRODUCT_CATEGORY_VALUES } from '@/lib/validations/products';
 import type { ProductCategoryValue, ProductUnitValue } from '@/lib/validations/products';
 import { archiveProduct, restoreProduct } from '@/server/actions/products';
 import { AddProductDialog } from './add-product-dialog';
@@ -104,7 +104,11 @@ export function ProductsClient({
   }
 
   function onImportComplete(imported: ProductRow[]) {
-    setProducts((prev) => [...prev, ...imported]);
+    setProducts((prev) => {
+      const byId = new Map(prev.map((p) => [p.id, p]));
+      for (const p of imported) byId.set(p.id, p);
+      return Array.from(byId.values());
+    });
   }
 
   const unitLabel = (unit: ProductUnitValue) => {
@@ -165,7 +169,7 @@ export function ProductsClient({
           </Button>
         </div>
         <div className="flex gap-2">
-          <CsvImportDialog onImportComplete={onImportComplete} />
+          <CsvImportDialog existingProducts={products} onImportComplete={onImportComplete} />
           <AddProductDialog onCreated={addProduct} />
         </div>
       </div>
@@ -189,6 +193,7 @@ export function ProductsClient({
                 <TableHead>Shade</TableHead>
                 <TableHead>Category</TableHead>
                 <TableHead>Unit</TableHead>
+                <TableHead className="hidden md:table-cell">Notes</TableHead>
                 <TableHead className="w-10" />
               </TableRow>
             </TableHeader>
@@ -215,6 +220,18 @@ export function ProductsClient({
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {unitLabel(p.unit)}
+                    </TableCell>
+                    <TableCell className="hidden max-w-48 md:table-cell">
+                      {p.notes ? (
+                        <span
+                          title={p.notes}
+                          className="block truncate text-sm text-muted-foreground"
+                        >
+                          {p.notes}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
@@ -263,4 +280,3 @@ export function ProductsClient({
 }
 
 export type { ProductRow };
-export { PRODUCT_UNIT_VALUES };

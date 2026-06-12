@@ -51,12 +51,22 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
   const clientProfile = booking.client;
   const clientId = booking.client?.id ?? null;
 
-  const [bookingProductsResult, allProducts, preferredResult, lastVisitResult] = await Promise.all([
-    getBookingProducts(booking.id),
-    getProducts(),
-    clientId ? getClientPreferredProducts(clientId) : Promise.resolve(null),
-    clientId ? getLastVisitProducts({ bookingId: booking.id, clientId }) : Promise.resolve(null),
-  ]);
+  const [bookingProductsResult, allProducts, preferredResult, lastVisitResult, recentlyUsed] =
+    await Promise.all([
+      getBookingProducts(booking.id),
+      getProducts(),
+      clientId ? getClientPreferredProducts(clientId) : Promise.resolve(null),
+      clientId ? getLastVisitProducts({ bookingId: booking.id, clientId }) : Promise.resolve(null),
+      prisma.bookingProduct.findMany({
+        where: { booking: { stylistId: booking.stylistId, salonId: salon.id } },
+        orderBy: { createdAt: 'desc' },
+        take: 30,
+        select: { productId: true },
+      }),
+    ]);
+
+  // Last 10 distinct products this stylist used — pinned to the top of the combobox
+  const recentProductIds = Array.from(new Set(recentlyUsed.map((r) => r.productId))).slice(0, 10);
 
   const initialBookingProducts = bookingProductsResult.success
     ? bookingProductsResult.products.map((bp) => ({
@@ -215,6 +225,7 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
               hasPreferred={hasPreferred}
               hasLastVisit={hasLastVisit}
               lastVisitDate={lastVisitDate}
+              recentProductIds={recentProductIds}
             />
           </CardContent>
         </Card>

@@ -10,7 +10,7 @@ const mockProductFindFirst = vi.fn();
 const mockProductFindMany = vi.fn();
 const mockProductCreate = vi.fn();
 const mockProductUpdate = vi.fn();
-const mockProductCreateMany = vi.fn();
+const mockProductCreateManyAndReturn = vi.fn();
 
 const mockBookingFindFirst = vi.fn();
 const mockBookingProductFindFirst = vi.fn();
@@ -36,12 +36,13 @@ vi.mock('@/server/auth', () => ({
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
+    $transaction: (ops: Promise<unknown>[]) => Promise.all(ops),
     product: {
       findFirst: (...args: unknown[]) => mockProductFindFirst(...args),
       findMany: (...args: unknown[]) => mockProductFindMany(...args),
       create: (...args: unknown[]) => mockProductCreate(...args),
       update: (...args: unknown[]) => mockProductUpdate(...args),
-      createMany: (...args: unknown[]) => mockProductCreateMany(...args),
+      createManyAndReturn: (...args: unknown[]) => mockProductCreateManyAndReturn(...args),
     },
     booking: {
       findFirst: (...args: unknown[]) => mockBookingFindFirst(...args),
@@ -199,11 +200,27 @@ describe('archiveProduct', () => {
 // ---------------------------------------------------------------------------
 
 describe('importProductsCsv', () => {
-  it('inserts valid rows and skips DB duplicates', async () => {
+  const insertedRow = (overrides: Record<string, unknown>) => ({
+    id: 'prod-new',
+    brand: 'Wella Professionals',
+    name: 'Koleston Perfect',
+    shadeCode: null,
+    sku: null,
+    category: 'COLOUR',
+    unit: 'TUBE',
+    notes: null,
+    archivedAt: null,
+    ...overrides,
+  });
+
+  it('inserts valid rows and skips DB duplicates by default', async () => {
     mockProductFindMany.mockResolvedValue([
-      { brand: 'Wella Professionals', name: 'Koleston Perfect', shadeCode: '7/3' },
+      { id: 'prod-1', brand: 'Wella Professionals', name: 'Koleston Perfect', shadeCode: '7/3' },
     ]);
-    mockProductCreateMany.mockResolvedValue({ count: 2 });
+    mockProductCreateManyAndReturn.mockResolvedValue([
+      insertedRow({ id: 'prod-new-1', shadeCode: '9/0' }),
+      insertedRow({ id: 'prod-new-2', brand: 'Kevin Murphy', name: 'ANGEL.WASH' }),
+    ]);
 
     const result = await importProductsCsv([
       // already in DB — should be skipped
@@ -227,13 +244,52 @@ describe('importProductsCsv', () => {
     ]);
 
     expect(result.inserted).toBe(2);
+    expect(result.updated).toBe(0);
     expect(result.skipped).toBe(1);
     expect(result.errors).toHaveLength(0);
+    expect(result.products).toHaveLength(2);
+    expect(mockProductUpdate).not.toHaveBeenCalled();
+  });
+
+  it('updates matched existing rows when updateExisting is set', async () => {
+    mockProductFindMany.mockResolvedValue([
+      { id: 'prod-1', brand: 'Wella Professionals', name: 'Koleston Perfect', shadeCode: '7/3' },
+    ]);
+    mockProductUpdate.mockResolvedValue(
+      insertedRow({ id: 'prod-1', shadeCode: '7/3', notes: 'Golden warm brown' })
+    );
+
+    const result = await importProductsCsv(
+      [
+        {
+          brand: 'Wella Professionals',
+          name: 'Koleston Perfect',
+          shade_code: '7/3',
+          category: 'colour',
+          unit: 'tube',
+          notes: 'Golden warm brown',
+        },
+      ],
+      { updateExisting: true }
+    );
+
+    expect(result.inserted).toBe(0);
+    expect(result.updated).toBe(1);
+    expect(result.skipped).toBe(0);
+    expect(mockProductCreateManyAndReturn).not.toHaveBeenCalled();
+    expect(mockProductUpdate).toHaveBeenCalledWith({
+      where: { id: 'prod-1' },
+      data: { sku: null, category: 'COLOUR', unit: 'TUBE', notes: 'Golden warm brown' },
+    });
+    expect(result.products).toHaveLength(1);
+    expect(result.products[0].notes).toBe('Golden warm brown');
   });
 
   it('reports validation errors per row without stopping other rows', async () => {
     mockProductFindMany.mockResolvedValue([]);
-    mockProductCreateMany.mockResolvedValue({ count: 1 });
+    mockProductCreateManyAndReturn.mockResolvedValue([
+      insertedRow({ brand: 'Kevin Murphy', name: 'ANGEL.WASH' }),
+    ]);
 
     const result = await importProductsCsv([
       { brand: 'Wella', name: 'Test', category: 'colur', unit: 'tube' }, // typo in category
@@ -248,7 +304,7 @@ describe('importProductsCsv', () => {
 
   it('detects duplicates within the upload batch', async () => {
     mockProductFindMany.mockResolvedValue([]);
-    mockProductCreateMany.mockResolvedValue({ count: 1 });
+    mockProductCreateManyAndReturn.mockResolvedValue([insertedRow({ shadeCode: '7/3' })]);
 
     const result = await importProductsCsv([
       { brand: 'Wella', name: 'Koleston', shade_code: '7/3', category: 'colour', unit: 'tube' },
@@ -269,7 +325,8 @@ describe('importProductsCsv', () => {
 
     expect(result.inserted).toBe(0);
     expect(result.errors).toHaveLength(1);
-    expect(mockProductCreateMany).not.toHaveBeenCalled();
+    expect(result.products).toHaveLength(0);
+    expect(mockProductCreateManyAndReturn).not.toHaveBeenCalled();
   });
 });
 
