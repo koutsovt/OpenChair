@@ -3,8 +3,13 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { rateLimit } from '@/lib/rate-limit';
 
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+
+  const phone = request.nextUrl.searchParams.get('phone');
+  if (!phone) {
+    return NextResponse.json({ error: 'phone query parameter is required' }, { status: 400 });
+  }
 
   const booking = await prisma.booking.findUnique({
     where: { id },
@@ -16,17 +21,27 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       price: true,
       cancelledAt: true,
       createdAt: true,
+      guestPhone: true,
+      client: { select: { phone: true } },
       service: { select: { id: true, name: true, duration: true, price: true } },
       stylist: { select: { id: true, name: true, imageUrl: true } },
       salon: { select: { id: true, name: true, slug: true } },
     },
   });
 
+  // Return 404 (not 403) on both missing booking and phone mismatch to avoid
+  // leaking booking existence to anyone holding a leaked id (CWE-639).
   if (!booking) {
     return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
   }
 
-  return NextResponse.json(booking);
+  const bookingPhone = booking.client?.phone ?? booking.guestPhone;
+  if (bookingPhone !== phone) {
+    return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
+  }
+
+  const { guestPhone: _guestPhone, client: _client, ...safeBooking } = booking;
+  return NextResponse.json(safeBooking);
 }
 
 const cancelSchema = z.object({

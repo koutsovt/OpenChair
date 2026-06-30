@@ -226,15 +226,32 @@ describe('POST /api/v1/bookings', () => {
     expect(json.error).toBe('This stylist does not offer this service');
   });
 
-  it('returns 409 when booking conflicts', async () => {
-    mockCreateBookingCore.mockRejectedValue(new Error('conflict'));
+  it('returns 409 with the specific message on a real validation conflict', async () => {
+    mockCreateBookingCore.mockRejectedValue(
+      new Error('This time slot conflicts with an existing booking')
+    );
 
     const req = makePostRequest(validBody);
     const res = await POST(req);
     const json = await res.json();
 
     expect(res.status).toBe(409);
-    expect(json.error).toBe('conflict');
+    expect(json.error).toBe('This time slot conflicts with an existing booking');
+  });
+
+  it('masks non-validation errors and does not leak Prisma internals', async () => {
+    mockCreateBookingCore.mockRejectedValue(
+      new Error('Foreign key constraint failed on the field: `Booking_serviceId_fkey (index)`')
+    );
+
+    const req = makePostRequest(validBody);
+    const res = await POST(req);
+    const json = await res.json();
+
+    expect(res.status).toBe(409);
+    expect(json.error).toBe('Booking failed');
+    expect(json.error).not.toContain('Booking_serviceId');
+    expect(json.error).not.toContain('constraint');
   });
 });
 
@@ -243,30 +260,30 @@ describe('GET /api/v1/bookings', () => {
     vi.clearAllMocks();
   });
 
-  it('returns booking by id', async () => {
-    const bookingData = {
-      id: 'b-1',
-      startTime: new Date().toISOString(),
-      endTime: new Date().toISOString(),
-      status: 'CONFIRMED',
-      price: 5000,
-      notes: null,
-      guestName: 'John Doe',
-      guestPhone: '+1234567890',
-      createdAt: new Date().toISOString(),
-      service: { id: 'svc-1', name: 'Haircut', duration: 60, price: 5000 },
-      stylist: { id: 'sty-1', name: 'Jane', imageUrl: null },
-      salon: {
-        id: 'salon-1',
-        name: 'Test Salon',
-        slug: 'test-salon',
-        phone: '+10000000000',
-        address: '123 Main St',
-      },
-    };
-    mockBookingFindUnique.mockResolvedValue(bookingData);
+  const guestBookingData = {
+    id: 'b-1',
+    startTime: new Date().toISOString(),
+    endTime: new Date().toISOString(),
+    status: 'CONFIRMED',
+    price: 5000,
+    createdAt: new Date().toISOString(),
+    guestPhone: '+1234567890',
+    client: null,
+    service: { id: 'svc-1', name: 'Haircut', duration: 60, price: 5000 },
+    stylist: { id: 'sty-1', name: 'Jane', imageUrl: null },
+    salon: {
+      id: 'salon-1',
+      name: 'Test Salon',
+      slug: 'test-salon',
+      phone: '+10000000000',
+      address: '123 Main St',
+    },
+  };
 
-    const req = makeGetRequest({ id: 'b-1' });
+  it('returns booking when phone matches', async () => {
+    mockBookingFindUnique.mockResolvedValue(guestBookingData);
+
+    const req = makeGetRequest({ id: 'b-1', phone: '+1234567890' });
     const res = await GET(req);
     const json = await res.json();
 
@@ -281,8 +298,49 @@ describe('GET /api/v1/bookings', () => {
     );
   });
 
+  it('does not leak guestName or guest contact fields', async () => {
+    mockBookingFindUnique.mockResolvedValue(guestBookingData);
+
+    const req = makeGetRequest({ id: 'b-1', phone: '+1234567890' });
+    const res = await GET(req);
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.guestName).toBeUndefined();
+    expect(json.guestPhone).toBeUndefined();
+    expect(json.client).toBeUndefined();
+  });
+
+  it('returns 404 when phone does not match (no existence oracle)', async () => {
+    mockBookingFindUnique.mockResolvedValue(guestBookingData);
+
+    const req = makeGetRequest({ id: 'b-1', phone: '+9999999999' });
+    const res = await GET(req);
+    const json = await res.json();
+
+    expect(res.status).toBe(404);
+    expect(json.error).toBe('Booking not found');
+    expect(json.guestName).toBeUndefined();
+    expect(json.guestPhone).toBeUndefined();
+  });
+
+  it('matches against the linked client phone when present', async () => {
+    mockBookingFindUnique.mockResolvedValue({
+      ...guestBookingData,
+      guestPhone: null,
+      client: { phone: '+1555000111' },
+    });
+
+    const req = makeGetRequest({ id: 'b-1', phone: '+1555000111' });
+    const res = await GET(req);
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.id).toBe('b-1');
+  });
+
   it('returns 400 when id missing', async () => {
-    const req = makeGetRequest();
+    const req = makeGetRequest({ phone: '+1234567890' });
     const res = await GET(req);
     const json = await res.json();
 
@@ -290,10 +348,19 @@ describe('GET /api/v1/bookings', () => {
     expect(json.error).toBe('id query parameter is required');
   });
 
+  it('returns 400 when phone missing', async () => {
+    const req = makeGetRequest({ id: 'b-1' });
+    const res = await GET(req);
+    const json = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(json.error).toBe('phone query parameter is required');
+  });
+
   it('returns 404 when booking not found', async () => {
     mockBookingFindUnique.mockResolvedValue(null);
 
-    const req = makeGetRequest({ id: 'nonexistent' });
+    const req = makeGetRequest({ id: 'nonexistent', phone: '+1234567890' });
     const res = await GET(req);
     const json = await res.json();
 

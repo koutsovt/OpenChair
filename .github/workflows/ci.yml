@@ -1,0 +1,52 @@
+name: CI
+
+# Runs the static quality gates + unit tests on every push and PR.
+# Deliberately excludes anything needing live infra/secrets
+# (real database, Twilio, Stripe, Playwright e2e). Unit tests must
+# stay runnable without external services or real env secrets.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  quality-gates:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          # No "packageManager" field in package.json, so a version is required.
+          # Matches the pnpm-lock.yaml lockfileVersion 9.0.
+          version: 10
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The Prisma client is generated into src/generated/prisma (gitignored),
+      # so typecheck and test must run after generation. The build script
+      # already runs this, but CI doesn't build, so generate explicitly.
+      - name: Generate Prisma client
+        run: pnpm prisma generate
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Format check
+        run: pnpm format:check
+
+      - name: Test
+        run: pnpm test

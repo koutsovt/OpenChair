@@ -25,6 +25,13 @@ const COOKIE_NAME =
     : 'next-auth.session-token';
 
 export async function GET(request: NextRequest) {
+  // Hard guard: disabled in production unless explicitly opted in. Prevents the
+  // demo session-minting endpoint from acting as an anonymous auth bypass
+  // (BP-001 / CWE-288) if the demo account ever exists in a prod database.
+  if (process.env.NODE_ENV === 'production' && process.env.ENABLE_DEMO_LOGIN !== 'true') {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
+
   // Rate-limit: 10 req/min per IP
   const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
   const { allowed } = rateLimit(`demo:${ip}`, { windowMs: 60_000, max: 10 });

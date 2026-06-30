@@ -6,6 +6,16 @@ import { createBookingCore } from '@/server/services/booking-service';
 import { sendSMS, logSms } from '@/lib/twilio';
 import { bookingConfirmationMessage } from '@/lib/sms-templates';
 import { rateLimit } from '@/lib/rate-limit';
+import { log } from '@/lib/logger';
+
+// Exact user-facing strings intentionally thrown by validateBooking /
+// createBookingCore. Only these may be echoed to the caller; any other error
+// (e.g. a raw Prisma exception) is logged server-side and masked to avoid
+// leaking model/field/constraint internals (CWE-209).
+const KNOWN_BOOKING_ERRORS = new Set([
+  'This time slot conflicts with an existing booking',
+  'End time must be after start time',
+]);
 
 const createBookingSchema = z.object({
   salonSlug: z.string().min(1),
@@ -116,8 +126,14 @@ export async function POST(request: NextRequest) {
       notes: parsed.data.notes || null,
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Booking failed';
-    return NextResponse.json({ error: message }, { status: 409 });
+    const safe =
+      err instanceof Error && KNOWN_BOOKING_ERRORS.has(err.message)
+        ? err.message
+        : 'Booking failed';
+    if (safe === 'Booking failed') {
+      log.error({ err }, 'createBooking failed');
+    }
+    return NextResponse.json({ error: safe }, { status: 409 });
   }
 
   if (client.phone && !client.smsOptOut) {
@@ -162,6 +178,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'id query parameter is required' }, { status: 400 });
   }
 
+  const phone = request.nextUrl.searchParams.get('phone');
+  if (!phone) {
+    return NextResponse.json({ error: 'phone query parameter is required' }, { status: 400 });
+  }
+
   const booking = await prisma.booking.findUnique({
     where: { id },
     select: {
@@ -170,17 +191,26 @@ export async function GET(request: NextRequest) {
       endTime: true,
       status: true,
       price: true,
-      guestName: true,
       createdAt: true,
+      guestPhone: true,
+      client: { select: { phone: true } },
       service: { select: { id: true, name: true, duration: true, price: true } },
       stylist: { select: { id: true, name: true, imageUrl: true } },
       salon: { select: { id: true, name: true, slug: true, phone: true, address: true } },
     },
   });
 
+  // Return 404 (not 403) on both missing booking and phone mismatch to avoid
+  // leaking booking existence to anyone holding a leaked id (CWE-639).
   if (!booking) {
     return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
   }
 
-  return NextResponse.json(booking);
+  const bookingPhone = booking.client?.phone ?? booking.guestPhone;
+  if (bookingPhone !== phone) {
+    return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
+  }
+
+  const { guestPhone: _guestPhone, client: _client, ...safeBooking } = booking;
+  return NextResponse.json(safeBooking);
 }

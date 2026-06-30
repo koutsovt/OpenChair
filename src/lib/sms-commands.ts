@@ -14,6 +14,11 @@ export function parseCommand(body: string): SmsCommand {
   return null;
 }
 
+// SECURITY (BP-002 follow-up): client identity here is derived solely from the
+// inbound `From` number, which is only trustworthy because the route gates on a
+// valid Twilio signature. Follow-up (not in scope here): add an out-of-band
+// confirmation step for destructive commands (CANCEL / STOP / BOOK) as
+// defense-in-depth against carrier-level number spoofing.
 export async function executeCommand(
   phone: string,
   command: SmsCommand,

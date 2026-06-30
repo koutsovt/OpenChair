@@ -4,12 +4,17 @@ import { prisma } from '@/lib/prisma';
 import { loadTwilioCredentials } from '@/lib/credentials';
 import { log } from '@/lib/logger';
 
+/**
+ * Dev-only escape hatch for Twilio signature validation and real SMS sends.
+ *
+ * SECURITY (BP-002): this MUST NOT key off credential VALUES. A bypass derived
+ * from a placeholder credential meant the public SMS webhook became fully
+ * unauthenticated the moment an operator staged a 'placeholder' Twilio var.
+ * The bypass now requires an explicit, non-production opt-in and can never be
+ * enabled in production.
+ */
 function isDevMode(): boolean {
-  return (
-    process.env.NODE_ENV === 'development' ||
-    env.TWILIO_ACCOUNT_SID === 'placeholder' ||
-    env.TWILIO_AUTH_TOKEN === 'placeholder'
-  );
+  return process.env.NODE_ENV !== 'production' && process.env.TWILIO_SKIP_SIGNATURE === 'true';
 }
 
 /**
@@ -34,7 +39,7 @@ export async function sendSMS(
   body: string
 ): Promise<{ success: boolean; sid?: string; error?: string }> {
   if (isDevMode()) {
-    log.info({ to, body }, '[SMS-DEV] skipping real send in dev/placeholder mode');
+    log.info({ to, body }, '[SMS-DEV] skipping real send (TWILIO_SKIP_SIGNATURE dev mode)');
     return { success: true, sid: `dev_${Date.now()}` };
   }
 
@@ -59,8 +64,19 @@ export function validateTwilioSignature(
   signature: string
 ): boolean {
   if (isDevMode()) return true;
-  const creds = getTwilioCredentials();
-  return twilio.validateRequest(creds.authToken, signature, url, params);
+
+  // Fail closed: if credentials are missing/invalid (e.g. mid-setup in
+  // production) we must NOT treat the request as authentic. Return false so the
+  // route responds 403 rather than throwing a 500 or silently allowing it.
+  let authToken: string;
+  try {
+    authToken = getTwilioCredentials().authToken;
+  } catch (error) {
+    log.error({ err: error }, 'Twilio signature validation failed: credentials unavailable');
+    return false;
+  }
+
+  return twilio.validateRequest(authToken, signature, url, params);
 }
 
 export async function logSms(data: {

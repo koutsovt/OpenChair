@@ -1,11 +1,15 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const mockSmsLogCreate = vi.fn();
 
+// SECURITY (BP-002): the dev bypass no longer keys off credential VALUES. It now
+// requires an explicit, non-production opt-in via TWILIO_SKIP_SIGNATURE. Provide
+// real (non-placeholder) credentials and enable the opt-in to exercise the
+// dev-bypass path.
 vi.mock('@/lib/env', () => ({
   env: {
-    TWILIO_ACCOUNT_SID: 'placeholder',
-    TWILIO_AUTH_TOKEN: 'placeholder',
+    TWILIO_ACCOUNT_SID: 'AC_test_sid',
+    TWILIO_AUTH_TOKEN: 'test_auth_token',
     TWILIO_PHONE_NUMBER: '+1234567890',
   },
 }));
@@ -26,10 +30,26 @@ vi.mock('twilio', () => {
   return { default: client };
 });
 
+import twilio from 'twilio';
 import { sendSMS, validateTwilioSignature, logSms } from '../twilio';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mockValidateRequest = (twilio as any).validateRequest as ReturnType<typeof vi.fn>;
+
+const originalNodeEnv = process.env.NODE_ENV;
+const originalSkip = process.env.TWILIO_SKIP_SIGNATURE;
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Enable the explicit non-production dev-bypass gate.
+  vi.stubEnv('NODE_ENV', 'development');
+  vi.stubEnv('TWILIO_SKIP_SIGNATURE', 'true');
+});
+
+afterEach(() => {
+  vi.stubEnv('NODE_ENV', originalNodeEnv ?? 'test');
+  vi.stubEnv('TWILIO_SKIP_SIGNATURE', originalSkip ?? '');
+  vi.unstubAllEnvs();
 });
 
 describe('sendSMS (dev mode)', () => {
@@ -46,9 +66,34 @@ describe('sendSMS (dev mode)', () => {
 });
 
 describe('validateTwilioSignature (dev mode)', () => {
-  it('returns true regardless of inputs', () => {
+  it('returns true regardless of inputs when TWILIO_SKIP_SIGNATURE=true and non-prod', () => {
     expect(validateTwilioSignature('http://example.com', {}, '')).toBe(true);
     expect(validateTwilioSignature('', { foo: 'bar' }, 'bad-sig')).toBe(true);
+  });
+});
+
+describe('validateTwilioSignature (BP-002 — no bypass without opt-in)', () => {
+  it('does NOT bypass in development when TWILIO_SKIP_SIGNATURE is unset', () => {
+    vi.stubEnv('NODE_ENV', 'development');
+    vi.stubEnv('TWILIO_SKIP_SIGNATURE', '');
+    // Falls through to the mocked twilio.validateRequest (returns true), proving
+    // it no longer short-circuits on the dev gate.
+    expect(validateTwilioSignature('http://example.com', {}, 'sig')).toBe(true);
+  });
+
+  it('NEVER bypasses in production even with TWILIO_SKIP_SIGNATURE=true', () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('TWILIO_SKIP_SIGNATURE', 'true');
+    mockValidateRequest.mockReturnValue(false);
+    // Must reach the real signature check (mocked validateRequest), not bypass.
+    const result = validateTwilioSignature('http://example.com', {}, 'bad-sig');
+    expect(mockValidateRequest).toHaveBeenCalledWith(
+      'test_auth_token',
+      'bad-sig',
+      'http://example.com',
+      {}
+    );
+    expect(result).toBe(false);
   });
 });
 

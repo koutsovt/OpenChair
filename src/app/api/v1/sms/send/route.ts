@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { authenticateSalonByApiKey } from '@/lib/api-auth';
 import { sendSMS, logSms } from '@/lib/twilio';
+import { prisma } from '@/lib/prisma';
 
 const sendSmsSchema = z.object({
   phone: z.string().min(6),
@@ -26,6 +27,28 @@ export async function POST(request: NextRequest) {
   const parsed = sendSmsSchema.safeParse(json);
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
+  }
+
+  // BP-005 (CWE-639): bookingId/clientId FKs are global, not salon-scoped.
+  // Verify any supplied id belongs to the authenticated salon before logging
+  // so salon A cannot write an SmsLog row referencing salon B's records.
+  if (parsed.data.bookingId) {
+    const booking = await prisma.booking.findFirst({
+      where: { id: parsed.data.bookingId, salonId: salon.id },
+      select: { id: true },
+    });
+    if (!booking) {
+      return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
+    }
+  }
+  if (parsed.data.clientId) {
+    const client = await prisma.client.findFirst({
+      where: { id: parsed.data.clientId, salonId: salon.id },
+      select: { id: true },
+    });
+    if (!client) {
+      return NextResponse.json({ error: 'Client not found' }, { status: 404 });
+    }
   }
 
   const result = await sendSMS(parsed.data.phone, parsed.data.body);
