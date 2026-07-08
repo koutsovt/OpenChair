@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
+import { parse, isValid } from 'date-fns';
 import { prisma } from '@/lib/prisma';
 import { getAuthenticatedSalon } from '@/server/auth';
 
@@ -195,6 +196,157 @@ export async function deleteClient(id: string) {
   return { success: true };
 }
 
+// Fields that can be targeted by a CSV import column mapping.
+export const IMPORT_FIELDS = [
+  'name',
+  'phone',
+  'email',
+  'notes',
+  'birthDate',
+  'source',
+  'allergies',
+  'hairType',
+  'hairTexture',
+  'naturalColour',
+  'productPreferences',
+] as const;
+
+export type ImportField = (typeof IMPORT_FIELDS)[number];
+
+const importRowSchema = z.object({
+  name: z.string({ error: 'name is required' }).trim().min(1, 'name is required'),
+  phone: z.string().trim().optional().default(''),
+  email: z.string().trim().email().optional().or(z.literal('')),
+  notes: z.string().trim().optional().default(''),
+  birthDate: z.string().trim().optional().default(''),
+  source: z.string().trim().optional().default(''),
+  allergies: z.string().trim().optional().default(''),
+  hairType: z.string().trim().optional().default(''),
+  hairTexture: z.string().trim().optional().default(''),
+  naturalColour: z.string().trim().optional().default(''),
+  productPreferences: z.string().trim().optional().default(''),
+});
+
+// Accepted date formats for imported birth dates. Day-first (AU/NZ, e.g.
+// Kitomba) is tried before month-first so "04/11/1975" reads as 4 November.
+const DATE_FORMATS = ['dd/MM/yyyy', 'd/M/yyyy', 'yyyy-MM-dd', 'dd-MM-yyyy', 'MM/dd/yyyy'] as const;
+
+function parseImportDate(value: string): Date | null {
+  for (const format of DATE_FORMATS) {
+    const parsed = parse(value, format, new Date());
+    if (isValid(parsed)) {
+      // Normalise to UTC midnight so the stored date can't drift across timezones.
+      return new Date(Date.UTC(parsed.getFullYear(), parsed.getMonth(), parsed.getDate()));
+    }
+  }
+  return null;
+}
+
+export interface ImportResult {
+  imported: number;
+  skipped: number;
+  errors: string[];
+}
+
+/**
+ * Bulk-import clients from parsed CSV rows (records keyed by OpenChair field name).
+ * Rows the caller failed to map keep only the fields provided. Invalid rows and
+ * phone-duplicates are skipped and reported, not thrown — a partial import still
+ * succeeds. Duplicate detection covers both existing DB clients and repeats
+ * within the uploaded file itself.
+ */
+export async function importClients(
+  rows: Array<Partial<Record<ImportField, string>>>
+): Promise<ImportResult> {
+  const salon = await getAuthenticatedSalon();
+
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return { imported: 0, skipped: 0, errors: ['No rows to import'] };
+  }
+  if (rows.length > 5000) {
+    return {
+      imported: 0,
+      skipped: 0,
+      errors: ['Too many rows — split into files of 5000 or fewer'],
+    };
+  }
+
+  const errors: string[] = [];
+
+  // Existing phone numbers for this salon, to skip duplicates in one query.
+  const existing = await prisma.client.findMany({
+    where: { salonId: salon.id, isActive: true, phone: { not: null } },
+    select: { phone: true },
+  });
+  const seenPhones = new Set(existing.map((c) => c.phone).filter((p): p is string => Boolean(p)));
+
+  const toCreate: Array<{
+    name: string;
+    phone: string | null;
+    email: string | null;
+    notes: string | null;
+    birthDate: Date | null;
+    source: string | null;
+    allergies: string | null;
+    hairType: string | null;
+    hairTexture: string | null;
+    naturalColour: string | null;
+    productPreferences: string | null;
+    salonId: string;
+  }> = [];
+
+  rows.forEach((row, i) => {
+    const lineNo = i + 1;
+    const parsed = importRowSchema.safeParse(row);
+    if (!parsed.success) {
+      errors.push(`Row ${lineNo}: ${parsed.error.issues[0].message}`);
+      return;
+    }
+    const r = parsed.data;
+
+    const phone = r.phone || null;
+    if (phone && seenPhones.has(phone)) {
+      errors.push(`Row ${lineNo}: duplicate phone ${phone} — skipped`);
+      return;
+    }
+    if (phone) seenPhones.add(phone);
+
+    let birthDate: Date | null = null;
+    if (r.birthDate) {
+      birthDate = parseImportDate(r.birthDate);
+      if (!birthDate) {
+        errors.push(`Row ${lineNo}: invalid birth date "${r.birthDate}" — imported without it`);
+      }
+    }
+
+    toCreate.push({
+      name: r.name,
+      phone,
+      email: r.email || null,
+      notes: r.notes || null,
+      birthDate,
+      source: r.source || null,
+      allergies: r.allergies || null,
+      hairType: r.hairType || null,
+      hairTexture: r.hairTexture || null,
+      naturalColour: r.naturalColour || null,
+      productPreferences: r.productPreferences || null,
+      salonId: salon.id,
+    });
+  });
+
+  if (toCreate.length > 0) {
+    await prisma.client.createMany({ data: toCreate });
+    revalidatePath('/clients');
+  }
+
+  return {
+    imported: toCreate.length,
+    skipped: rows.length - toCreate.length,
+    errors,
+  };
+}
+
 export async function searchClients(query: string) {
   const salon = await getAuthenticatedSalon();
 
@@ -208,6 +360,7 @@ export async function searchClients(query: string) {
         { email: { contains: query } },
       ],
     },
+    include: { preferredStylist: { select: { name: true } } },
     orderBy: { name: 'asc' },
     take: 20,
   });

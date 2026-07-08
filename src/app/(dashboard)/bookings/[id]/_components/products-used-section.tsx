@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition, useRef } from 'react';
+import { useState, useTransition, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Minus, Plus, Trash2, Pin, Check } from 'lucide-react';
 import { toast } from 'sonner';
@@ -16,12 +16,14 @@ import {
   removeProductFromBooking,
   applyPreferredProductsToBooking,
   getBookingProducts,
+  getPairedDeveloper,
   pinBookingProductToClient,
   repeatLastVisitProducts,
 } from '@/server/actions/products';
 
 type BookingProduct = {
   id: string;
+  productId: string;
   product: { brand: string; name: string; shadeCode: string | null };
   quantity: number;
   notes: string | null;
@@ -36,7 +38,8 @@ interface ProductsUsedSectionProps {
   hasPreferred: boolean;
   hasLastVisit: boolean;
   lastVisitDate: Date | null;
-  allProducts: ProductOption[];
+  lastVisitItems: { label: string; quantity: number }[];
+  allProducts: (ProductOption & { category: string })[];
   recentProductIds: string[];
 }
 
@@ -50,6 +53,7 @@ export function ProductsUsedSection({
   hasPreferred,
   hasLastVisit,
   lastVisitDate,
+  lastVisitItems,
   allProducts,
   recentProductIds,
 }: ProductsUsedSectionProps) {
@@ -60,6 +64,12 @@ export function ProductsUsedSection({
   const [pinningId, setPinningId] = useState<string | null>(null);
   const [pinForm, setPinForm] = useState<PinForm>(emptyPin());
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set());
+  const [devSuggestion, setDevSuggestion] = useState<ProductOption | null>(null);
+
+  const categoryById = useMemo(
+    () => new Map(allProducts.map((p) => [p.id, p.category])),
+    [allProducts]
+  );
 
   // router.refresh() alone cannot update `items` (useState keeps its value when
   // server props change), so bulk additions re-fetch the list explicitly.
@@ -69,6 +79,7 @@ export function ProductsUsedSection({
       setItems(
         res.products.map((bp) => ({
           id: bp.id,
+          productId: bp.productId,
           product: {
             brand: bp.product.brand,
             name: bp.product.name,
@@ -114,6 +125,23 @@ export function ProductsUsedSection({
     });
   };
 
+  // After adding a colour with no developer on the list, suggest the developer
+  // this salon most often pairs with it — one tap instead of a second search.
+  const maybeSuggestDeveloper = (added: ProductOption, currentItems: BookingProduct[]) => {
+    if (categoryById.get(added.id) !== 'COLOUR') return;
+    const hasDeveloper = currentItems.some((i) => categoryById.get(i.productId) === 'DEVELOPER');
+    if (hasDeveloper) return;
+    getPairedDeveloper(added.id)
+      .then((res) => {
+        if (res.success && res.developer) {
+          setDevSuggestion(res.developer);
+        }
+      })
+      .catch(() => {
+        // Suggestion is best-effort; adding the colour already succeeded.
+      });
+  };
+
   const handleSelect = (product: ProductOption) => {
     startTransition(async () => {
       const res = await addProductToBooking({ bookingId, productId: product.id, quantity: 1 });
@@ -121,15 +149,19 @@ export function ProductsUsedSection({
         toast.error(res.error);
         return;
       }
-      setItems((prev) => [
-        ...prev,
+      const next: BookingProduct[] = [
+        ...items,
         {
           id: res.bookingProductId,
+          productId: product.id,
           product: { brand: product.brand, name: product.name, shadeCode: product.shadeCode },
           quantity: 1,
           notes: null,
         },
-      ]);
+      ];
+      setItems(next);
+      setDevSuggestion((prev) => (prev?.id === product.id ? null : prev));
+      maybeSuggestDeveloper(product, next);
     });
   };
 
@@ -216,12 +248,47 @@ export function ProductsUsedSection({
         </Button>
       </div>
 
+      {hasLastVisit && lastVisitItems.length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          Last visit:{' '}
+          {lastVisitItems
+            .map((i) => (i.quantity > 1 ? `${i.label} ×${i.quantity}` : i.label))
+            .join(' · ')}
+        </p>
+      )}
+
       <ProductCombobox
         products={allProducts}
         recentProductIds={recentProductIds}
         onSelect={handleSelect}
         disabled={isPending}
       />
+
+      {devSuggestion && (
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-dashed p-2 text-sm">
+          <span>
+            Usually paired with{' '}
+            <span className="font-medium">
+              {devSuggestion.brand} {devSuggestion.name}
+              {devSuggestion.shadeCode ? ` ${devSuggestion.shadeCode}` : ''}
+            </span>
+          </span>
+          <Button
+            size="sm"
+            disabled={isPending}
+            onClick={() => {
+              const suggestion = devSuggestion;
+              setDevSuggestion(null);
+              handleSelect(suggestion);
+            }}
+          >
+            Add
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setDevSuggestion(null)}>
+            Dismiss
+          </Button>
+        </div>
+      )}
 
       {items.length > 0 && (
         <ul className="space-y-2">

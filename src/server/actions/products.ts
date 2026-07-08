@@ -849,3 +849,51 @@ export async function repeatLastVisitProducts(data: {
   revalidatePath(`/bookings/${data.bookingId}`);
   return { success: true, addedCount: toInsert.length };
 }
+
+/**
+ * Suggest the developer most often logged alongside a colour product in this
+ * salon's recent bookings. Returns null when there's no usage history yet.
+ */
+export async function getPairedDeveloper(productId: string): Promise<
+  | {
+      success: true;
+      developer: { id: string; brand: string; name: string; shadeCode: string | null } | null;
+    }
+  | { success: false; error: string }
+> {
+  const salon = await getAuthenticatedSalon();
+
+  const product = await prisma.product.findFirst({
+    where: { id: productId, salonId: salon.id },
+    select: { id: true },
+  });
+  if (!product) return { success: false, error: 'Product not found' };
+
+  // Recent bookings where this colour product was used
+  const usages = await prisma.bookingProduct.findMany({
+    where: { productId, booking: { salonId: salon.id } },
+    orderBy: { createdAt: 'desc' },
+    take: 50,
+    select: { bookingId: true },
+  });
+  if (usages.length === 0) return { success: true, developer: null };
+
+  const grouped = await prisma.bookingProduct.groupBy({
+    by: ['productId'],
+    where: {
+      bookingId: { in: usages.map((u) => u.bookingId) },
+      productId: { not: productId },
+      product: { category: 'DEVELOPER', archivedAt: null },
+    },
+    _count: { productId: true },
+    orderBy: { _count: { productId: 'desc' } },
+    take: 1,
+  });
+  if (grouped.length === 0) return { success: true, developer: null };
+
+  const developer = await prisma.product.findUnique({
+    where: { id: grouped[0].productId },
+    select: { id: true, brand: true, name: true, shadeCode: true },
+  });
+  return { success: true, developer };
+}

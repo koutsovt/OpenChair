@@ -189,6 +189,7 @@ describe('searchClients', () => {
           { email: { contains: 'Ali' } },
         ],
       },
+      include: { preferredStylist: { select: { name: true } } },
       orderBy: { name: 'asc' },
       take: 20,
     });

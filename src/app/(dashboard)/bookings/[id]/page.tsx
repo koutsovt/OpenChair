@@ -13,6 +13,7 @@ import { formatPrice, formatDuration } from '@/lib/utils';
 import { BlurText } from '@/components/ui/blur-text';
 import { BookingDetailActions } from './_components/booking-detail-actions';
 import { ProductsUsedSection } from './_components/products-used-section';
+import { RebookButton } from './_components/rebook-button';
 import {
   getBookingProducts,
   getProducts,
@@ -51,19 +52,41 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
   const clientProfile = booking.client;
   const clientId = booking.client?.id ?? null;
 
-  const [bookingProductsResult, allProducts, preferredResult, lastVisitResult, recentlyUsed] =
-    await Promise.all([
-      getBookingProducts(booking.id),
-      getProducts(),
-      clientId ? getClientPreferredProducts(clientId) : Promise.resolve(null),
-      clientId ? getLastVisitProducts({ bookingId: booking.id, clientId }) : Promise.resolve(null),
-      prisma.bookingProduct.findMany({
-        where: { booking: { stylistId: booking.stylistId, salonId: salon.id } },
-        orderBy: { createdAt: 'desc' },
-        take: 30,
-        select: { productId: true },
-      }),
-    ]);
+  const [
+    bookingProductsResult,
+    allProducts,
+    preferredResult,
+    lastVisitResult,
+    recentlyUsed,
+    services,
+    stylistServices,
+  ] = await Promise.all([
+    getBookingProducts(booking.id),
+    getProducts(),
+    clientId ? getClientPreferredProducts(clientId) : Promise.resolve(null),
+    clientId ? getLastVisitProducts({ bookingId: booking.id, clientId }) : Promise.resolve(null),
+    prisma.bookingProduct.findMany({
+      where: { booking: { stylistId: booking.stylistId, salonId: salon.id } },
+      orderBy: { createdAt: 'desc' },
+      take: 30,
+      select: { productId: true },
+    }),
+    prisma.service.findMany({
+      where: { salonId: salon.id, isActive: true },
+      orderBy: { sortOrder: 'asc' },
+      select: { id: true, name: true, price: true, duration: true },
+    }),
+    prisma.stylistService.findMany({
+      where: { stylist: { salonId: salon.id, isActive: true } },
+      include: { stylist: { select: { id: true, name: true } } },
+    }),
+  ]);
+
+  // Stylists per service, for the rebook form
+  const stylistsByService: Record<string, { id: string; name: string }[]> = {};
+  for (const ss of stylistServices) {
+    (stylistsByService[ss.serviceId] ??= []).push({ id: ss.stylist.id, name: ss.stylist.name });
+  }
 
   // Last 10 distinct products this stylist used — pinned to the top of the combobox
   const recentProductIds = Array.from(new Set(recentlyUsed.map((r) => r.productId))).slice(0, 10);
@@ -71,6 +94,7 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
   const initialBookingProducts = bookingProductsResult.success
     ? bookingProductsResult.products.map((bp) => ({
         id: bp.id,
+        productId: bp.productId,
         product: {
           brand: bp.product.brand,
           name: bp.product.name,
@@ -90,6 +114,23 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
     lastVisitResult && lastVisitResult.success ? lastVisitResult.visitDate : null;
   const hasLastVisit = !!lastVisitDate;
 
+  // Compact preview of what "Repeat last visit" would add
+  const productById = new Map(allProducts.map((p) => [p.id, p]));
+  const lastVisitItems =
+    lastVisitResult && lastVisitResult.success
+      ? lastVisitResult.products.map((p) => {
+          const prod = productById.get(p.productId);
+          return {
+            label: prod
+              ? prod.shadeCode
+                ? `${prod.brand} ${prod.shadeCode}`
+                : `${prod.brand} ${prod.name}`
+              : 'Archived product',
+            quantity: p.quantity,
+          };
+        })
+      : [];
+
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div className="flex items-center gap-4">
@@ -101,6 +142,23 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
         <div className="flex-1">
           <BlurText text="Booking Details" className="text-2xl font-bold tracking-tight" />
         </div>
+        <RebookButton
+          services={services}
+          stylistsByService={stylistsByService}
+          serviceId={booking.serviceId}
+          stylistId={booking.stylistId}
+          stylistName={booking.stylist.name}
+          client={
+            booking.client
+              ? { id: booking.client.id, name: booking.client.name, phone: booking.client.phone }
+              : undefined
+          }
+          guest={
+            !booking.client && booking.guestName
+              ? { name: booking.guestName, phone: booking.guestPhone ?? '' }
+              : undefined
+          }
+        />
         <Badge className={bookingStatusStyle(booking.status).badge} variant="secondary">
           {bookingStatusStyle(booking.status).label}
         </Badge>
@@ -225,6 +283,7 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
               hasPreferred={hasPreferred}
               hasLastVisit={hasLastVisit}
               lastVisitDate={lastVisitDate}
+              lastVisitItems={lastVisitItems}
               recentProductIds={recentProductIds}
             />
           </CardContent>

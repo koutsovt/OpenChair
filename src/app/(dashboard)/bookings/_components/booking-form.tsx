@@ -34,33 +34,48 @@ type ClientOption = {
   id: string;
   name: string;
   phone: string | null;
+  preferredStylistId: string | null;
+  preferredStylistName: string | null;
 };
 
 type SlotOption = { start: string; end: string };
 
+// Pre-filled selections, e.g. when rebooking an existing appointment.
+export type BookingPrefill = {
+  serviceId?: string;
+  stylistId?: string;
+  stylistName?: string;
+  client?: { id: string; name: string; phone: string | null };
+  guest?: { name: string; phone: string };
+  defaultDate?: Date;
+  startAtStep?: number;
+};
+
 export function BookingForm({
   services,
   stylistsByService,
+  prefill,
   onClose,
 }: {
   services: ServiceOption[];
   stylistsByService: Record<string, StylistOption[]>;
+  prefill?: BookingPrefill;
   onClose?: () => void;
 }) {
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState(prefill?.startAtStep ?? 1);
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
 
   // Selections
-  const [serviceId, setServiceId] = useState('');
-  const [stylistId, setStylistId] = useState('');
-  const [date, setDate] = useState<Date | undefined>(undefined);
+  const [serviceId, setServiceId] = useState(prefill?.serviceId ?? '');
+  const [stylistId, setStylistId] = useState(prefill?.stylistId ?? '');
+  const [date, setDate] = useState<Date | undefined>(prefill?.defaultDate ?? new Date());
   const [slotStart, setSlotStart] = useState('');
-  const [clientId, setClientId] = useState('');
-  const [guestName, setGuestName] = useState('');
-  const [guestPhone, setGuestPhone] = useState('');
+  const [clientId, setClientId] = useState(prefill?.client?.id ?? '');
+  const [guestName, setGuestName] = useState(prefill?.guest?.name ?? '');
+  const [guestPhone, setGuestPhone] = useState(prefill?.guest?.phone ?? '');
   const [notes, setNotes] = useState('');
-  const [isGuest, setIsGuest] = useState(false);
+  const [isGuest, setIsGuest] = useState(!!prefill?.guest);
 
   // Loaded data
   const [slots, setSlots] = useState<SlotOption[]>([]);
@@ -68,7 +83,11 @@ export function BookingForm({
   const [suggestions, setSuggestions] = useState<
     { start: string; end: string; stylistName: string; reason: string }[]
   >([]);
-  const [clients, setClients] = useState<ClientOption[]>([]);
+  const [clients, setClients] = useState<ClientOption[]>(
+    prefill?.client
+      ? [{ ...prefill.client, preferredStylistId: null, preferredStylistName: null }]
+      : []
+  );
   const [clientQuery, setClientQuery] = useState('');
   const [searchingClients, setSearchingClients] = useState(false);
 
@@ -101,7 +120,7 @@ export function BookingForm({
       endDate.toISOString(),
       5
     )
-      .then((s) =>
+      .then((s) => {
         setSuggestions(
           s.map((slot) => ({
             start: slot.start,
@@ -109,8 +128,18 @@ export function BookingForm({
             stylistName: slot.stylistName,
             reason: slot.reason,
           }))
-        )
-      )
+        );
+        // Default to the first recommended time so confirming is one click;
+        // the user can still pick any other slot. Suggestions can spill into
+        // the next day, so only auto-select one on the chosen date — silently
+        // picking tomorrow would invite wrong-day bookings.
+        const sameDay = s.find(
+          (slot) => new Date(slot.start).toDateString() === date.toDateString()
+        );
+        if (sameDay) {
+          setSlotStart((prev) => prev || sameDay.start);
+        }
+      })
       .catch(() => setSuggestions([]));
   }, [stylistId, serviceId, date, availableStylists]);
 
@@ -124,7 +153,15 @@ export function BookingForm({
     setSearchingClients(true);
     searchClients(query)
       .then((results) =>
-        setClients(results.map((c) => ({ id: c.id, name: c.name, phone: c.phone })))
+        setClients(
+          results.map((c) => ({
+            id: c.id,
+            name: c.name,
+            phone: c.phone,
+            preferredStylistId: c.preferredStylistId,
+            preferredStylistName: c.preferredStylist?.name ?? null,
+          }))
+        )
       )
       .finally(() => setSearchingClients(false));
   }, []);
@@ -154,6 +191,8 @@ export function BookingForm({
 
   const selectedStylist = availableStylists.find((s) => s.id === stylistId);
   const selectedClient = clients.find((c) => c.id === clientId);
+  // With a single qualified stylist there is nothing to choose — skip step 2.
+  const singleStylist = availableStylists.length === 1;
 
   return (
     <div className="space-y-6">
@@ -196,7 +235,17 @@ export function BookingForm({
             <p className="text-muted-foreground">No services available. Add services first.</p>
           )}
           <div className="flex justify-end">
-            <Button onClick={() => setStep(2)} disabled={!serviceId}>
+            <Button
+              onClick={() => {
+                if (singleStylist) {
+                  setStylistId(availableStylists[0].id);
+                  setStep(3);
+                } else {
+                  setStep(2);
+                }
+              }}
+              disabled={!serviceId}
+            >
               Next
             </Button>
           </div>
@@ -293,10 +342,10 @@ export function BookingForm({
             </div>
           </div>
           <div className="flex justify-between">
-            <Button variant="outline" onClick={() => setStep(2)}>
+            <Button variant="outline" onClick={() => setStep(singleStylist ? 1 : 2)}>
               Back
             </Button>
-            <Button onClick={() => setStep(4)} disabled={!slotStart}>
+            <Button onClick={() => setStep(clientId ? 5 : 4)} disabled={!slotStart}>
               Next
             </Button>
           </div>
@@ -348,6 +397,14 @@ export function BookingForm({
                   </div>
                 ))}
               </div>
+              {selectedClient?.preferredStylistId &&
+                selectedClient.preferredStylistName &&
+                stylistId !== 'auto' &&
+                selectedClient.preferredStylistId !== stylistId && (
+                  <p className="text-sm text-amber-600">
+                    💡 {selectedClient.name} usually sees {selectedClient.preferredStylistName}
+                  </p>
+                )}
             </div>
           ) : (
             <div className="space-y-3">
@@ -395,7 +452,9 @@ export function BookingForm({
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Stylist</span>
                 <span className="font-medium">
-                  {stylistId === 'auto' ? 'Auto-assigned' : selectedStylist?.name}
+                  {stylistId === 'auto'
+                    ? 'Auto-assigned'
+                    : (selectedStylist?.name ?? prefill?.stylistName)}
                 </span>
               </div>
               <div className="flex justify-between">

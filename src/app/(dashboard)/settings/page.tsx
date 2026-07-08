@@ -1,6 +1,7 @@
 import { getAuthenticatedSalon } from '@/server/auth';
 import { BlurText } from '@/components/ui/blur-text';
 import { ThemeSettingsForm } from './theme-form';
+import { ImportClients } from './import-clients';
 import { PRESET_IDS, PRESETS, buildGoogleFontsUrl, type SalonTheme } from '@/lib/theme';
 
 // Deduplicate fonts across all presets
@@ -22,6 +23,7 @@ export default async function SettingsPage() {
           <p className="text-muted-foreground">Customize your salon&apos;s look</p>
         </div>
         <ThemeSettingsForm initialTheme={theme} />
+        <ImportClients />
       </div>
     </>
   );
