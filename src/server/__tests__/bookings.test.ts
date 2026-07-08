@@ -4,6 +4,7 @@ const mockGetAuthenticatedSalon = vi.fn();
 const mockServiceFindFirst = vi.fn();
 const mockStylistFindFirst = vi.fn();
 const mockClientFindFirst = vi.fn();
+const mockClientCreate = vi.fn();
 const mockBookingFindFirst = vi.fn();
 const mockBookingUpdate = vi.fn();
 const mockStylistFindMany = vi.fn();
@@ -28,7 +29,10 @@ vi.mock('@/lib/prisma', () => ({
       findFirst: (...args: unknown[]) => mockStylistFindFirst(...args),
       findMany: (...args: unknown[]) => mockStylistFindMany(...args),
     },
-    client: { findFirst: (...args: unknown[]) => mockClientFindFirst(...args) },
+    client: {
+      findFirst: (...args: unknown[]) => mockClientFindFirst(...args),
+      create: (...args: unknown[]) => mockClientCreate(...args),
+    },
     booking: {
       findFirst: (...args: unknown[]) => mockBookingFindFirst(...args),
       update: (...args: unknown[]) => mockBookingUpdate(...args),
@@ -102,6 +106,7 @@ beforeEach(() => {
   mockServiceFindFirst.mockReset();
   mockStylistFindFirst.mockReset();
   mockClientFindFirst.mockReset();
+  mockClientCreate.mockReset();
   mockBookingFindFirst.mockReset();
   mockBookingUpdate.mockReset();
   mockCreateBookingCore.mockReset();
@@ -294,6 +299,58 @@ describe('updateBookingStatus', () => {
         cancelledAt: expect.any(Date),
       },
     });
+  });
+
+  const guestBooking = {
+    ...bookingWithIncludes,
+    clientId: null,
+    guestName: 'Walk-in Wendy',
+    guestPhone: '0412 000 111',
+  };
+
+  it('promotes a guest to a new client when their first visit completes', async () => {
+    mockBookingFindFirst.mockResolvedValue(guestBooking);
+    mockBookingUpdate.mockResolvedValue({ ...guestBooking, status: 'COMPLETED' });
+    mockClientFindFirst.mockResolvedValue(null); // no existing client with that phone
+    mockClientCreate.mockResolvedValue({ id: 'new-client-1' });
+
+    const result = await updateBookingStatus('b1', 'COMPLETED');
+
+    expect(result).toEqual({ success: true });
+    expect(mockClientCreate).toHaveBeenCalledWith({
+      data: { name: 'Walk-in Wendy', phone: '0412 000 111', source: 'guest', salonId: 'salon-1' },
+      select: { id: true },
+    });
+    // Booking relinked to the new client and guest fields cleared
+    expect(mockBookingUpdate).toHaveBeenCalledWith({
+      where: { id: 'b1' },
+      data: { clientId: 'new-client-1', guestName: null, guestPhone: null },
+    });
+    expect(mockRevalidatePath).toHaveBeenCalledWith('/clients');
+  });
+
+  it('reuses an existing client with the same phone instead of duplicating', async () => {
+    mockBookingFindFirst.mockResolvedValue(guestBooking);
+    mockBookingUpdate.mockResolvedValue({ ...guestBooking, status: 'COMPLETED' });
+    mockClientFindFirst.mockResolvedValue({ id: 'existing-client-1' });
+
+    await updateBookingStatus('b1', 'COMPLETED');
+
+    expect(mockClientCreate).not.toHaveBeenCalled();
+    expect(mockBookingUpdate).toHaveBeenCalledWith({
+      where: { id: 'b1' },
+      data: { clientId: 'existing-client-1', guestName: null, guestPhone: null },
+    });
+  });
+
+  it('does not promote when the completed booking already has a client', async () => {
+    mockBookingFindFirst.mockResolvedValue({ ...bookingWithIncludes, clientId: 'c1' });
+    mockBookingUpdate.mockResolvedValue({ ...bookingWithIncludes, status: 'COMPLETED' });
+
+    await updateBookingStatus('b1', 'COMPLETED');
+
+    expect(mockClientCreate).not.toHaveBeenCalled();
+    expect(mockClientFindFirst).not.toHaveBeenCalled();
   });
 });
 

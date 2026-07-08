@@ -137,6 +137,43 @@ export async function createBooking(data: {
   return { success: true, bookingId: booking.id };
 }
 
+/**
+ * Convert a completed guest booking into a linked Client. Reuses an existing
+ * client with the same phone in this salon (guests often become repeat walk-ins
+ * under the same number) rather than creating duplicates. The booking is
+ * relinked to the client and its guest fields cleared.
+ */
+async function promoteGuestToClient(
+  salonId: string,
+  booking: { id: string; guestName: string; guestPhone: string | null }
+): Promise<void> {
+  const phone = booking.guestPhone?.trim() || null;
+
+  const existing = phone
+    ? await prisma.client.findFirst({
+        where: { salonId, phone, isActive: true },
+        select: { id: true },
+      })
+    : null;
+
+  const client =
+    existing ??
+    (await prisma.client.create({
+      data: {
+        name: booking.guestName,
+        phone,
+        source: 'guest',
+        salonId,
+      },
+      select: { id: true },
+    }));
+
+  await prisma.booking.update({
+    where: { id: booking.id },
+    data: { clientId: client.id, guestName: null, guestPhone: null },
+  });
+}
+
 export async function updateBookingStatus(
   id: string,
   status: BookingStatus
@@ -159,6 +196,18 @@ export async function updateBookingStatus(
       cancelledAt: status === 'CANCELLED' ? new Date() : undefined,
     },
   });
+
+  // Promote a guest to a returning customer once their first visit completes:
+  // create (or reuse) a Client from the guest details and link this booking to
+  // it, so future bookings recognise them instead of re-entering guest info.
+  if (status === 'COMPLETED' && !booking.clientId && booking.guestName) {
+    await promoteGuestToClient(salon.id, {
+      id: booking.id,
+      guestName: booking.guestName,
+      guestPhone: booking.guestPhone,
+    });
+    revalidatePath('/clients');
+  }
 
   // When a booking is cancelled, check waitlist for matching entries
   if (status === 'CANCELLED') {
