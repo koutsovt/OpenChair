@@ -14,6 +14,9 @@ import { BlurText } from '@/components/ui/blur-text';
 import { BookingDetailActions } from './_components/booking-detail-actions';
 import { ProductsUsedSection } from './_components/products-used-section';
 import { RebookButton } from './_components/rebook-button';
+import { RebookNudgeCard } from './_components/rebook-nudge-card';
+import { rebookNudgeMessage } from '@/lib/sms-templates';
+import { env } from '@/lib/env';
 import {
   getBookingProducts,
   getProducts,
@@ -34,6 +37,7 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
           name: true,
           phone: true,
           email: true,
+          smsOptOut: true,
           allergies: true,
           hairType: true,
           hairTexture: true,
@@ -78,14 +82,36 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
     }),
     prisma.stylistService.findMany({
       where: { stylist: { salonId: salon.id, isActive: true } },
-      include: { stylist: { select: { id: true, name: true } } },
+      include: {
+        stylist: {
+          select: {
+            id: true,
+            name: true,
+            availability: {
+              where: { isActive: true },
+              select: { dayOfWeek: true, startTime: true, endTime: true },
+            },
+          },
+        },
+      },
     }),
   ]);
 
   // Stylists per service, for the rebook form
-  const stylistsByService: Record<string, { id: string; name: string }[]> = {};
+  const stylistsByService: Record<
+    string,
+    {
+      id: string;
+      name: string;
+      availability: { dayOfWeek: number; startTime: string; endTime: string }[];
+    }[]
+  > = {};
   for (const ss of stylistServices) {
-    (stylistsByService[ss.serviceId] ??= []).push({ id: ss.stylist.id, name: ss.stylist.name });
+    (stylistsByService[ss.serviceId] ??= []).push({
+      id: ss.stylist.id,
+      name: ss.stylist.name,
+      availability: ss.stylist.availability,
+    });
   }
 
   // Last 10 distinct products this stylist used — pinned to the top of the combobox
@@ -113,6 +139,46 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
   const lastVisitDate =
     lastVisitResult && lastVisitResult.success ? lastVisitResult.visitDate : null;
   const hasLastVisit = !!lastVisitDate;
+
+  // Rebooking nudge: offer after a completed visit for SMS-reachable clients
+  // who haven't rebooked and haven't been nudged for this visit already.
+  let nudgeMessage: string | null = null;
+  if (
+    booking.status === 'COMPLETED' &&
+    booking.client?.phone &&
+    !booking.client.smsOptOut &&
+    clientId
+  ) {
+    const [upcoming, alreadyNudged] = await Promise.all([
+      prisma.booking.findFirst({
+        where: {
+          clientId,
+          salonId: salon.id,
+          startTime: { gt: new Date() },
+          status: { in: ['PENDING', 'CONFIRMED', 'IN_PROGRESS'] },
+        },
+        select: { id: true },
+      }),
+      prisma.smsLog.findFirst({
+        where: {
+          bookingId: booking.id,
+          direction: 'OUTBOUND',
+          status: 'sent',
+          createdAt: { gt: booking.endTime },
+        },
+        select: { id: true },
+      }),
+    ]);
+    if (!upcoming && !alreadyNudged) {
+      nudgeMessage = rebookNudgeMessage({
+        clientName: booking.client.name,
+        salonName: salon.name,
+        serviceName: booking.service.name,
+        stylistName: booking.stylist.name,
+        bookingUrl: `${env.NEXT_PUBLIC_APP_URL}/book/${salon.slug}`,
+      });
+    }
+  }
 
   // Compact preview of what "Repeat last visit" would add
   const productById = new Map(allProducts.map((p) => [p.id, p]));
@@ -288,6 +354,14 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
             />
           </CardContent>
         </Card>
+      )}
+
+      {nudgeMessage && booking.client && (
+        <RebookNudgeCard
+          bookingId={booking.id}
+          clientName={booking.client.name}
+          message={nudgeMessage}
+        />
       )}
 
       <BookingDetailActions bookingId={booking.id} currentStatus={booking.status} />

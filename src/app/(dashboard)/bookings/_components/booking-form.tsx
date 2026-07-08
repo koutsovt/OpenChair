@@ -25,10 +25,31 @@ type ServiceOption = {
   duration: number;
 };
 
+type AllocationWindow = { dayOfWeek: number; startTime: string; endTime: string };
+
 type StylistOption = {
   id: string;
   name: string;
+  availability: AllocationWindow[];
 };
+
+const toMinutes = (t: string) => {
+  const [h, m] = t.split(':').map(Number);
+  return h * 60 + m;
+};
+
+/** Allocation windows for a stylist on a given date (may be empty = day off). */
+function windowsOn(stylist: StylistOption, date: Date): AllocationWindow[] {
+  return stylist.availability.filter((a) => a.dayOfWeek === date.getDay());
+}
+
+/** Whether the stylist's allocated hours cover a specific moment. */
+function isAllocatedAt(stylist: StylistOption, when: Date): boolean {
+  const mins = when.getHours() * 60 + when.getMinutes();
+  return windowsOn(stylist, when).some(
+    (w) => toMinutes(w.startTime) <= mins && mins < toMinutes(w.endTime)
+  );
+}
 
 type ClientOption = {
   id: string;
@@ -194,6 +215,22 @@ export function BookingForm({
   // With a single qualified stylist there is nothing to choose — skip step 2.
   const singleStylist = availableStylists.length === 1;
 
+  // Stylists allocated on the selected date listed first.
+  const sortedStylists = useMemo(() => {
+    if (!date) return availableStylists;
+    return [...availableStylists].sort(
+      (a, b) => Number(windowsOn(b, date).length > 0) - Number(windowsOn(a, date).length > 0)
+    );
+  }, [availableStylists, date]);
+
+  // Preferred-stylist hint: only claim availability the allocation supports.
+  const preferredStylist =
+    selectedClient?.preferredStylistId && selectedClient.preferredStylistId !== stylistId
+      ? availableStylists.find((s) => s.id === selectedClient.preferredStylistId)
+      : undefined;
+  const preferredAllocated =
+    preferredStylist && slotStart ? isAllocatedAt(preferredStylist, new Date(slotStart)) : false;
+
   return (
     <div className="space-y-6">
       {/* Step indicators */}
@@ -256,6 +293,11 @@ export function BookingForm({
       {step === 2 && (
         <div className="space-y-4">
           <h3 className="text-lg font-semibold">Select a stylist</h3>
+          {date && (
+            <p className="text-sm text-muted-foreground">
+              Allocated hours shown for {format(date, 'EEEE d MMM')}
+            </p>
+          )}
           <div className="grid gap-3 sm:grid-cols-2">
             <Card
               className={`cursor-pointer transition-colors ${stylistId === 'auto' ? 'border-primary ring-2 ring-primary/20' : 'hover:border-primary/50'}`}
@@ -266,17 +308,30 @@ export function BookingForm({
                 <div className="text-sm text-muted-foreground">Auto-assign the best match</div>
               </CardContent>
             </Card>
-            {availableStylists.map((s) => (
-              <Card
-                key={s.id}
-                className={`cursor-pointer transition-colors ${stylistId === s.id ? 'border-primary ring-2 ring-primary/20' : 'hover:border-primary/50'}`}
-                onClick={() => setStylistId(s.id)}
-              >
-                <CardContent className="p-4">
-                  <div className="font-medium">{s.name}</div>
-                </CardContent>
-              </Card>
-            ))}
+            {sortedStylists.map((s) => {
+              const windows = date ? windowsOn(s, date) : [];
+              const working = windows.length > 0;
+              return (
+                <Card
+                  key={s.id}
+                  className={`cursor-pointer transition-colors ${stylistId === s.id ? 'border-primary ring-2 ring-primary/20' : 'hover:border-primary/50'} ${!working ? 'opacity-60' : ''}`}
+                  onClick={() => setStylistId(s.id)}
+                >
+                  <CardContent className="p-4">
+                    <div className="font-medium">{s.name}</div>
+                    {date && (
+                      <div
+                        className={`text-sm ${working ? 'text-emerald-600' : 'text-muted-foreground'}`}
+                      >
+                        {working
+                          ? windows.map((w) => `${w.startTime}–${w.endTime}`).join(', ')
+                          : 'Not working this day'}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
           {availableStylists.length === 0 && (
             <p className="text-muted-foreground">No stylists assigned to this service.</p>
@@ -403,6 +458,11 @@ export function BookingForm({
                 selectedClient.preferredStylistId !== stylistId && (
                   <p className="text-sm text-amber-600">
                     💡 {selectedClient.name} usually sees {selectedClient.preferredStylistName}
+                    {preferredStylist
+                      ? preferredAllocated
+                        ? ' — available at this time'
+                        : ' — not working at this time'
+                      : ''}
                   </p>
                 )}
             </div>

@@ -13,7 +13,11 @@ import {
 import { BookingForm } from './booking-form';
 
 type ServiceOption = { id: string; name: string; price: number; duration: number };
-type StylistOption = { id: string; name: string };
+type StylistOption = {
+  id: string;
+  name: string;
+  availability: { dayOfWeek: number; startTime: string; endTime: string }[];
+};
 
 export function NewBookingDialog({
   services,

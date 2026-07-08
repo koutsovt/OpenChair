@@ -51,6 +51,11 @@ vi.mock('@/lib/twilio', () => ({
 vi.mock('@/lib/sms-templates', () => ({
   bookingConfirmationMessage: vi.fn(() => 'Confirmation SMS'),
   bookingRescheduledMessage: vi.fn(() => 'Rescheduled SMS'),
+  rebookNudgeMessage: vi.fn(() => 'Rebook nudge SMS'),
+}));
+
+vi.mock('@/lib/env', () => ({
+  env: { NEXT_PUBLIC_APP_URL: 'https://test.openchair.app' },
 }));
 
 vi.mock('next/cache', () => ({

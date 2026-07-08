@@ -44,15 +44,37 @@ export default async function BookingsPage({
       stylist: { salonId: salon.id, isActive: true },
       serviceId: { in: services.map((s) => s.id) },
     },
-    include: { stylist: { select: { id: true, name: true } } },
+    include: {
+      stylist: {
+        select: {
+          id: true,
+          name: true,
+          availability: {
+            where: { isActive: true },
+            select: { dayOfWeek: true, startTime: true, endTime: true },
+          },
+        },
+      },
+    },
   });
 
-  const stylistsByService: Record<string, { id: string; name: string }[]> = {};
+  const stylistsByService: Record<
+    string,
+    {
+      id: string;
+      name: string;
+      availability: { dayOfWeek: number; startTime: string; endTime: string }[];
+    }[]
+  > = {};
   for (const ss of stylistServices) {
     if (!stylistsByService[ss.serviceId]) {
       stylistsByService[ss.serviceId] = [];
     }
-    stylistsByService[ss.serviceId].push({ id: ss.stylist.id, name: ss.stylist.name });
+    stylistsByService[ss.serviceId].push({
+      id: ss.stylist.id,
+      name: ss.stylist.name,
+      availability: ss.stylist.availability,
+    });
   }
 
   // All active stylists for timeline (include availability)

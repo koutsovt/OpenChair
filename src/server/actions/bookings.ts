@@ -8,7 +8,12 @@ import { createBookingCore } from '@/server/services/booking-service';
 import { getAvailableSlots } from '@/lib/slots';
 import { createBookingSchema } from '@/lib/validations/booking';
 import { sendSMS, logSms } from '@/lib/twilio';
-import { bookingConfirmationMessage, bookingRescheduledMessage } from '@/lib/sms-templates';
+import {
+  bookingConfirmationMessage,
+  bookingRescheduledMessage,
+  rebookNudgeMessage,
+} from '@/lib/sms-templates';
+import { env } from '@/lib/env';
 import { autoAssignStylist } from '@/lib/scheduling/auto-assign';
 import { matchWaitlistEntries, notifyWaitlistClient } from '@/lib/scheduling/waitlist';
 import { getSuggestedSlots as getSuggestedSlotsLib } from '@/lib/scheduling/smart-suggestions';
@@ -63,11 +68,16 @@ export async function createBooking(data: {
     return { success: false, error: 'Stylist not found' };
   }
 
-  let client: { id: string; name: string; phone: string | null } | null = null;
+  let client: {
+    id: string;
+    name: string;
+    phone: string | null;
+    smsOptOut: boolean;
+  } | null = null;
   if (parsed.data.clientId) {
     client = await prisma.client.findFirst({
       where: { id: parsed.data.clientId, salonId: salon.id },
-      select: { id: true, name: true, phone: true },
+      select: { id: true, name: true, phone: true, smsOptOut: true },
     });
     if (!client) {
       return { success: false, error: 'Client not found' };
@@ -95,10 +105,11 @@ export async function createBooking(data: {
     return { success: false, error: err instanceof Error ? err.message : 'Booking failed' };
   }
 
-  // Send confirmation SMS (fire-and-forget)
+  // Send confirmation SMS (fire-and-forget). Skip if the client has opted out;
+  // guest bookings (no client record) always receive their confirmation.
   const phone = client?.phone ?? parsed.data.guestPhone;
 
-  if (phone) {
+  if (phone && !client?.smsOptOut) {
     const clientName = client?.name ?? parsed.data.guestName ?? 'there';
     const smsBody = bookingConfirmationMessage({
       clientName,
@@ -176,6 +187,93 @@ export async function updateBookingStatus(
   return { success: true };
 }
 
+/**
+ * Send a one-off "come back soon" SMS for a completed visit. Guarded so the
+ * salon can't accidentally spam: requires a linked client with a phone number
+ * who hasn't opted out, hasn't already rebooked, and hasn't been nudged for
+ * this booking before.
+ */
+export async function sendRebookNudge(
+  bookingId: string
+): Promise<{ success: true } | { success: false; error: string }> {
+  const salon = await getAuthenticatedSalon();
+
+  const booking = await prisma.booking.findFirst({
+    where: { id: bookingId, salonId: salon.id },
+    include: {
+      client: { select: { id: true, name: true, phone: true, smsOptOut: true } },
+      service: { select: { name: true } },
+      stylist: { select: { name: true } },
+    },
+  });
+
+  if (!booking) return { success: false, error: 'Booking not found' };
+  if (booking.status !== 'COMPLETED') {
+    return { success: false, error: 'Nudges can only be sent for completed visits' };
+  }
+  if (!booking.client?.phone) {
+    return { success: false, error: 'Client has no phone number on file' };
+  }
+  if (booking.client.smsOptOut) {
+    return { success: false, error: 'Client has opted out of SMS' };
+  }
+
+  const [upcoming, alreadyNudged] = await Promise.all([
+    prisma.booking.findFirst({
+      where: {
+        clientId: booking.client.id,
+        salonId: salon.id,
+        startTime: { gt: new Date() },
+        status: { in: ['PENDING', 'CONFIRMED', 'IN_PROGRESS'] },
+      },
+      select: { id: true },
+    }),
+    prisma.smsLog.findFirst({
+      where: {
+        bookingId: booking.id,
+        direction: 'OUTBOUND',
+        status: 'sent',
+        createdAt: { gt: booking.endTime },
+      },
+      select: { id: true },
+    }),
+  ]);
+
+  if (upcoming) {
+    return { success: false, error: `${booking.client.name} already has an upcoming booking` };
+  }
+  if (alreadyNudged) {
+    return { success: false, error: 'A rebooking nudge was already sent for this visit' };
+  }
+
+  const body = rebookNudgeMessage({
+    clientName: booking.client.name,
+    salonName: salon.name,
+    serviceName: booking.service.name,
+    stylistName: booking.stylist.name,
+    bookingUrl: `${env.NEXT_PUBLIC_APP_URL}/book/${salon.slug}`,
+  });
+
+  const result = await sendSMS(booking.client.phone, body);
+  await logSms({
+    direction: 'OUTBOUND',
+    phone: booking.client.phone,
+    body,
+    status: result.success ? 'sent' : 'failed',
+    twilioSid: result.sid,
+    bookingId: booking.id,
+    clientId: booking.client.id,
+    salonId: salon.id,
+  });
+
+  if (!result.success) {
+    return { success: false, error: result.error ?? 'SMS send failed' };
+  }
+
+  revalidatePath(`/bookings/${bookingId}`);
+  return { success: true };
+}
+
 export async function rescheduleBooking(
   id: string,
   newStartTime: string,
@@ -229,9 +327,9 @@ export async function rescheduleBooking(
     include: { stylist: true, service: true },
   });
 
-  // Send rescheduled SMS to client
+  // Send rescheduled SMS to client (skip opted-out clients; guests always sent)
   const phone = booking.client?.phone ?? booking.guestPhone;
-  if (phone) {
+  if (phone && !booking.client?.smsOptOut) {
     const clientName = booking.client?.name ?? booking.guestName ?? 'there';
     const smsBody = bookingRescheduledMessage({
       clientName,
@@ -404,7 +502,7 @@ export async function reassignStylistBookings(
     });
 
     const phone = booking.client?.phone ?? booking.guestPhone;
-    if (phone) {
+    if (phone && !booking.client?.smsOptOut) {
       const clientName = booking.client?.name ?? booking.guestName ?? 'there';
       const smsBody = bookingRescheduledMessage({
         clientName,

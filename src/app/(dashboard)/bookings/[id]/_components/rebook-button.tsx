@@ -14,7 +14,11 @@ import {
 import { BookingForm, type BookingPrefill } from '../../_components/booking-form';
 
 type ServiceOption = { id: string; name: string; price: number; duration: number };
-type StylistOption = { id: string; name: string };
+type StylistOption = {
+  id: string;
+  name: string;
+  availability: { dayOfWeek: number; startTime: string; endTime: string }[];
+};
 
 export function RebookButton({
   services,

@@ -74,3 +74,13 @@ export function waitlistNotificationMessage(params: {
 export function waitlistExpiredMessage(params: { clientName: string; salonName: string }): string {
   return `Hi ${params.clientName}, the slot we notified you about at ${params.salonName} has expired. We'll let you know when another opens up!`;
 }
+
+export function rebookNudgeMessage(params: {
+  clientName: string;
+  salonName: string;
+  serviceName: string;
+  stylistName: string;
+  bookingUrl: string;
+}): string {
+  return `Hi ${params.clientName}! Thanks for visiting ${params.salonName}. ${params.stylistName} would love to see you again — book your next ${params.serviceName} anytime: ${params.bookingUrl}`;
+}

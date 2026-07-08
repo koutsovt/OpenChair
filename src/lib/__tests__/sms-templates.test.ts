@@ -7,6 +7,7 @@ import {
   recurringBookingMessage,
   waitlistNotificationMessage,
   waitlistExpiredMessage,
+  rebookNudgeMessage,
 } from '../sms-templates';
 
 const baseParams = {
@@ -150,5 +151,26 @@ describe('waitlistExpiredMessage', () => {
   it('includes client and salon name', () => {
     expect(msg).toContain('Alice');
     expect(msg).toContain('Luxe Salon');
+  });
+});
+
+describe('rebookNudgeMessage', () => {
+  const msg = rebookNudgeMessage({
+    clientName: 'Alice',
+    salonName: 'Luxe Salon',
+    serviceName: 'Haircut',
+    stylistName: 'Maria',
+    bookingUrl: 'https://openchair.app/book/luxe-salon',
+  });
+
+  it('includes all names', () => {
+    expect(msg).toContain('Alice');
+    expect(msg).toContain('Luxe Salon');
+    expect(msg).toContain('Haircut');
+    expect(msg).toContain('Maria');
+  });
+
+  it('includes the booking link', () => {
+    expect(msg).toContain('https://openchair.app/book/luxe-salon');
   });
 });
