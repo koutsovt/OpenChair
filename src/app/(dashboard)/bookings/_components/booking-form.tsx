@@ -14,6 +14,7 @@ import {
   createBooking,
   getAvailableSlotsAction,
   getSuggestedSlotsAction,
+  getSlotAlternativesAction,
 } from '@/server/actions/bookings';
 import { searchClients } from '@/server/actions/clients';
 import { formatPrice, formatDuration } from '@/lib/utils';
@@ -112,6 +113,12 @@ export function BookingForm({
   const [clientQuery, setClientQuery] = useState('');
   const [searchingClients, setSearchingClients] = useState(false);
 
+  // Fallback options shown when auto-assign finds no free stylist at the slot.
+  const [alternatives, setAlternatives] = useState<{
+    freeStylists: { id: string; name: string }[];
+    nearbySlots: { start: string; end: string; stylistId: string; stylistName: string }[];
+  } | null>(null);
+
   const selectedService = services.find((s) => s.id === serviceId);
   const availableStylists = useMemo(
     () => stylistsByService[serviceId] ?? [],
@@ -187,12 +194,14 @@ export function BookingForm({
       .finally(() => setSearchingClients(false));
   }, []);
 
-  function handleSubmit() {
+  // Book with explicit stylist + start time, bypassing auto-assign. Used both
+  // for the normal confirm and for accepting a fallback alternative.
+  function book(overrideStylistId: string, overrideStart: string) {
     startTransition(async () => {
       const result = await createBooking({
         serviceId,
-        stylistId,
-        startTime: slotStart,
+        stylistId: overrideStylistId,
+        startTime: overrideStart,
         clientId: isGuest ? undefined : clientId || undefined,
         guestName: isGuest ? guestName : undefined,
         guestPhone: isGuest ? guestPhone : undefined,
@@ -200,6 +209,16 @@ export function BookingForm({
       });
 
       if (!result.success) {
+        // Auto-assign found nobody free — surface concrete fallbacks instead of
+        // a dead-end error.
+        if (result.error === 'No available stylist for this time') {
+          const alts = await getSlotAlternativesAction(serviceId, overrideStart);
+          setAlternatives(alts);
+          if (alts.freeStylists.length === 0 && alts.nearbySlots.length === 0) {
+            toast.error('No stylists available near this time. Try another day.');
+          }
+          return;
+        }
         toast.error(result.error);
         return;
       }
@@ -208,6 +227,11 @@ export function BookingForm({
       router.refresh();
       onClose?.();
     });
+  }
+
+  function handleSubmit() {
+    setAlternatives(null);
+    book(stylistId, slotStart);
   }
 
   const selectedStylist = availableStylists.find((s) => s.id === stylistId);
@@ -553,6 +577,56 @@ export function BookingForm({
               rows={3}
             />
           </div>
+
+          {/* Fallback options when auto-assign found no free stylist */}
+          {alternatives &&
+            (alternatives.freeStylists.length > 0 || alternatives.nearbySlots.length > 0) && (
+              <Card className="border-amber-300 bg-amber-50">
+                <CardContent className="space-y-3 p-4">
+                  {alternatives.freeStylists.length > 0 ? (
+                    <>
+                      <p className="text-sm font-medium text-amber-800">
+                        No auto-match, but these stylists are free at this time:
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {alternatives.freeStylists.map((s) => (
+                          <Button
+                            key={s.id}
+                            size="sm"
+                            variant="outline"
+                            disabled={isPending}
+                            onClick={() => book(s.id, slotStart)}
+                          >
+                            Book with {s.name}
+                          </Button>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm font-medium text-amber-800">
+                        Nobody&apos;s free then. Nearest available times:
+                      </p>
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                        {alternatives.nearbySlots.map((s) => (
+                          <Button
+                            key={`${s.stylistId}-${s.start}`}
+                            size="sm"
+                            variant="outline"
+                            disabled={isPending}
+                            className="h-auto flex-col py-1.5"
+                            onClick={() => book(s.stylistId, s.start)}
+                          >
+                            <span>{format(new Date(s.start), 'EEE d, HH:mm')}</span>
+                            <span className="text-[10px] opacity-70">{s.stylistName}</span>
+                          </Button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
           <div className="flex justify-between">
             <Button variant="outline" onClick={() => setStep(4)}>

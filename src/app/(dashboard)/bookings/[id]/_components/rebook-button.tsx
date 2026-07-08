@@ -28,6 +28,7 @@ export function RebookButton({
   stylistName,
   client,
   guest,
+  defaultOpen = false,
 }: {
   services: ServiceOption[];
   stylistsByService: Record<string, StylistOption[]>;
@@ -36,8 +37,9 @@ export function RebookButton({
   stylistName: string;
   client?: { id: string; name: string; phone: string | null };
   guest?: { name: string; phone: string };
+  defaultOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
 
   // Service, stylist and client carry over — jump straight to picking a time,
   // defaulting the calendar to the typical 6-week rebook cycle.

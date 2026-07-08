@@ -24,8 +24,15 @@ import {
   getLastVisitProducts,
 } from '@/server/actions/products';
 
-export default async function BookingDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function BookingDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ rebook?: string }>;
+}) {
   const { id } = await params;
+  const { rebook } = await searchParams;
   const salon = await getAuthenticatedSalon();
 
   const booking = await prisma.booking.findFirst({
@@ -214,6 +221,7 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
           serviceId={booking.serviceId}
           stylistId={booking.stylistId}
           stylistName={booking.stylist.name}
+          defaultOpen={rebook === '1'}
           client={
             booking.client
               ? { id: booking.client.id, name: booking.client.name, phone: booking.client.phone }

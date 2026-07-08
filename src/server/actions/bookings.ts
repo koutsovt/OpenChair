@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { addMinutes, startOfDay, endOfDay } from 'date-fns';
 import { prisma } from '@/lib/prisma';
-import { validateBooking } from '@/lib/booking-validation';
+import { validateBooking, findConflictingBooking } from '@/lib/booking-validation';
 import { createBookingCore } from '@/server/services/booking-service';
 import { getAvailableSlots } from '@/lib/slots';
 import { createBookingSchema } from '@/lib/validations/booking';
@@ -403,6 +403,76 @@ export async function getAvailableSlotsAction(
     start: s.start.toISOString(),
     end: s.end.toISOString(),
   }));
+}
+
+/**
+ * Fallback finder for when auto-assign fails at a chosen time. Returns any
+ * stylists who offer the service and are free at that exact slot, and — if none
+ * are — the nearest alternative slots that day (across all qualifying stylists).
+ */
+export async function getSlotAlternativesAction(
+  serviceId: string,
+  startTime: string
+): Promise<{
+  freeStylists: { id: string; name: string }[];
+  nearbySlots: { start: string; end: string; stylistId: string; stylistName: string }[];
+}> {
+  const salon = await getAuthenticatedSalon();
+
+  const service = await prisma.service.findFirst({
+    where: { id: serviceId, salonId: salon.id },
+    select: { duration: true },
+  });
+  if (!service) return { freeStylists: [], nearbySlots: [] };
+
+  const start = new Date(startTime);
+  const end = addMinutes(start, service.duration);
+  const dayOfWeek = start.getDay();
+
+  // Stylists who offer this service and are rostered on this day
+  const stylists = await prisma.stylist.findMany({
+    where: {
+      salonId: salon.id,
+      isActive: true,
+      services: { some: { serviceId } },
+      availability: { some: { dayOfWeek, isActive: true } },
+    },
+    select: { id: true, name: true },
+  });
+  if (stylists.length === 0) return { freeStylists: [], nearbySlots: [] };
+
+  // Which of them are free at the exact requested slot?
+  const conflicts = await Promise.all(
+    stylists.map((s) => findConflictingBooking(s.id, start, end))
+  );
+  const freeStylists = stylists.filter((_, i) => conflicts[i] === null);
+
+  if (freeStylists.length > 0) {
+    return { freeStylists, nearbySlots: [] };
+  }
+
+  // Nobody free at that time — offer the nearest slots that day, closest first.
+  const suggestions = await getSuggestedSlotsLib(
+    salon.id,
+    serviceId,
+    undefined,
+    startOfDay(start),
+    endOfDay(start),
+    20
+  );
+  const nearbySlots = suggestions
+    .map((s) => ({
+      start: s.start.toISOString(),
+      end: s.end.toISOString(),
+      stylistId: s.stylistId,
+      stylistName: s.stylistName,
+      distance: Math.abs(s.start.getTime() - start.getTime()),
+    }))
+    .sort((a, b) => a.distance - b.distance)
+    .slice(0, 5)
+    .map(({ distance: _distance, ...rest }) => rest);
+
+  return { freeStylists: [], nearbySlots };
 }
 
 export async function reassignStylistBookings(

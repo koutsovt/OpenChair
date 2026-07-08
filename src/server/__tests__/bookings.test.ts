@@ -6,6 +6,9 @@ const mockStylistFindFirst = vi.fn();
 const mockClientFindFirst = vi.fn();
 const mockBookingFindFirst = vi.fn();
 const mockBookingUpdate = vi.fn();
+const mockStylistFindMany = vi.fn();
+const mockFindConflictingBooking = vi.fn();
+const mockGetSuggestedSlots = vi.fn();
 const mockCreateBookingCore = vi.fn();
 const mockAutoAssignStylist = vi.fn();
 const mockMatchWaitlist = vi.fn();
@@ -21,7 +24,10 @@ vi.mock('@/server/auth', () => ({
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     service: { findFirst: (...args: unknown[]) => mockServiceFindFirst(...args) },
-    stylist: { findFirst: (...args: unknown[]) => mockStylistFindFirst(...args) },
+    stylist: {
+      findFirst: (...args: unknown[]) => mockStylistFindFirst(...args),
+      findMany: (...args: unknown[]) => mockStylistFindMany(...args),
+    },
     client: { findFirst: (...args: unknown[]) => mockClientFindFirst(...args) },
     booking: {
       findFirst: (...args: unknown[]) => mockBookingFindFirst(...args),
@@ -64,6 +70,7 @@ vi.mock('next/cache', () => ({
 
 vi.mock('@/lib/booking-validation', () => ({
   validateBooking: vi.fn(),
+  findConflictingBooking: (...args: unknown[]) => mockFindConflictingBooking(...args),
 }));
 
 vi.mock('@/lib/slots', () => ({
@@ -71,10 +78,14 @@ vi.mock('@/lib/slots', () => ({
 }));
 
 vi.mock('@/lib/scheduling/smart-suggestions', () => ({
-  getSuggestedSlots: vi.fn(() => []),
+  getSuggestedSlots: (...args: unknown[]) => mockGetSuggestedSlots(...args),
 }));
 
-import { createBooking, updateBookingStatus } from '@/server/actions/bookings';
+import {
+  createBooking,
+  updateBookingStatus,
+  getSlotAlternativesAction,
+} from '@/server/actions/bookings';
 
 const defaultSalon = { id: 'salon-1', name: 'Test Salon', timezone: 'UTC' };
 const defaultService = {
@@ -100,9 +111,13 @@ beforeEach(() => {
   mockSendSMS.mockReset();
   mockLogSms.mockReset();
   mockRevalidatePath.mockReset();
+  mockStylistFindMany.mockReset();
+  mockFindConflictingBooking.mockReset();
+  mockGetSuggestedSlots.mockReset();
 
   mockGetAuthenticatedSalon.mockResolvedValue(defaultSalon);
   mockSendSMS.mockResolvedValue({ success: true, sid: 'SM123' });
+  mockGetSuggestedSlots.mockResolvedValue([]);
 });
 
 describe('createBooking', () => {
@@ -279,5 +294,65 @@ describe('updateBookingStatus', () => {
         cancelledAt: expect.any(Date),
       },
     });
+  });
+});
+
+describe('getSlotAlternativesAction', () => {
+  const start = '2026-04-01T10:00:00.000Z';
+
+  it('returns stylists free at the requested slot', async () => {
+    mockServiceFindFirst.mockResolvedValue({ duration: 60 });
+    mockStylistFindMany.mockResolvedValue([
+      { id: 'st-1', name: 'Maria' },
+      { id: 'st-2', name: 'Jo' },
+    ]);
+    // Maria busy, Jo free
+    mockFindConflictingBooking.mockResolvedValueOnce({ id: 'b-busy' }).mockResolvedValueOnce(null);
+
+    const result = await getSlotAlternativesAction('svc-1', start);
+
+    expect(result.freeStylists).toEqual([{ id: 'st-2', name: 'Jo' }]);
+    expect(result.nearbySlots).toEqual([]);
+    expect(mockGetSuggestedSlots).not.toHaveBeenCalled();
+  });
+
+  it('falls back to nearest slots when nobody is free', async () => {
+    mockServiceFindFirst.mockResolvedValue({ duration: 60 });
+    mockStylistFindMany.mockResolvedValue([{ id: 'st-1', name: 'Maria' }]);
+    mockFindConflictingBooking.mockResolvedValue({ id: 'b-busy' });
+    mockGetSuggestedSlots.mockResolvedValue([
+      {
+        start: new Date('2026-04-01T13:00:00.000Z'),
+        end: new Date('2026-04-01T14:00:00.000Z'),
+        stylistId: 'st-1',
+        stylistName: 'Maria',
+        score: 1,
+        reason: 'gap',
+      },
+      {
+        start: new Date('2026-04-01T10:30:00.000Z'),
+        end: new Date('2026-04-01T11:30:00.000Z'),
+        stylistId: 'st-1',
+        stylistName: 'Maria',
+        score: 1,
+        reason: 'gap',
+      },
+    ]);
+
+    const result = await getSlotAlternativesAction('svc-1', start);
+
+    expect(result.freeStylists).toEqual([]);
+    // Closest to 10:00 (10:30) sorted before 13:00
+    expect(result.nearbySlots[0].start).toBe('2026-04-01T10:30:00.000Z');
+    expect(result.nearbySlots).toHaveLength(2);
+  });
+
+  it('returns empty when no stylist offers the service', async () => {
+    mockServiceFindFirst.mockResolvedValue({ duration: 60 });
+    mockStylistFindMany.mockResolvedValue([]);
+
+    const result = await getSlotAlternativesAction('svc-1', start);
+
+    expect(result).toEqual({ freeStylists: [], nearbySlots: [] });
   });
 });
