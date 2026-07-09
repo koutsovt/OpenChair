@@ -3,6 +3,7 @@ import { env } from '@/lib/env';
 import { prisma } from '@/lib/prisma';
 import { loadTwilioCredentials } from '@/lib/credentials';
 import { log } from '@/lib/logger';
+import { toE164 } from '@/lib/utils';
 
 /**
  * Dev-only escape hatch for Twilio signature validation and real SMS sends.
@@ -38,8 +39,20 @@ export async function sendSMS(
   to: string,
   body: string
 ): Promise<{ success: boolean; sid?: string; error?: string }> {
+  // Normalise to E.164 before anything else. Twilio rejects local/spaced
+  // formats (error 21211), so numbers stored as "0498 111 006" must become
+  // "+61498111006" here. Fail closed on numbers we can't normalise.
+  const normalized = toE164(to);
+  if (!normalized) {
+    log.error({ to }, 'Twilio SMS send skipped: could not normalise to E.164');
+    return { success: false, error: `Invalid phone number: ${to}` };
+  }
+
   if (isDevMode()) {
-    log.info({ to, body }, '[SMS-DEV] skipping real send (TWILIO_SKIP_SIGNATURE dev mode)');
+    log.info(
+      { to: normalized, body },
+      '[SMS-DEV] skipping real send (TWILIO_SKIP_SIGNATURE dev mode)'
+    );
     return { success: true, sid: `dev_${Date.now()}` };
   }
 
@@ -48,7 +61,7 @@ export async function sendSMS(
     const message = await getTwilioClient().messages.create({
       body,
       from: creds.fromNumber,
-      to,
+      to: normalized,
     });
     return { success: true, sid: message.sid };
   } catch (error) {

@@ -34,7 +34,13 @@ export async function executeCommand(
   }
 
   if (!command) {
-    return forwardToSalon(client.id, client.name, phone, rawBody, salonId);
+    return forwardToSalon({
+      clientId: client.id,
+      clientName: client.name,
+      clientPhone: phone,
+      messageBody: rawBody,
+      salonId,
+    });
   }
 
   switch (command) {
@@ -47,13 +53,21 @@ export async function executeCommand(
   }
 }
 
-async function forwardToSalon(
-  clientId: string,
-  clientName: string,
-  clientPhone: string,
-  messageBody: string,
-  salonId: string
-): Promise<string> {
+/**
+ * Relay an inbound SMS to the salon owner's phone. Works for both known clients
+ * and unknown senders (walk-ins, new enquiries) — `clientId`/`clientName` are
+ * optional so a message from a number not yet in the CRM still reaches the salon
+ * instead of being bounced.
+ */
+export async function forwardToSalon(params: {
+  clientId?: string;
+  clientName?: string;
+  clientPhone: string;
+  messageBody: string;
+  salonId: string;
+}): Promise<string> {
+  const { clientId, clientName, clientPhone, messageBody, salonId } = params;
+
   const salon = await prisma.salon.findUnique({
     where: { id: salonId },
     include: { owner: { select: { phone: true, email: true, firstName: true } } },
@@ -64,7 +78,8 @@ async function forwardToSalon(
     return 'Thanks for your message. Please call the salon directly for assistance.';
   }
 
-  const forwardBody = `SMS from ${clientName} (${clientPhone}):\n"${messageBody}"`;
+  const sender = clientName ?? 'Unknown sender';
+  const forwardBody = `SMS from ${sender} (${clientPhone}):\n"${messageBody}"`;
   const result = await sendSMS(ownerPhone, forwardBody);
 
   void logSms({

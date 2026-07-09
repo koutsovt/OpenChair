@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { validateTwilioSignature, logSms } from '@/lib/twilio';
-import { parseCommand, executeCommand } from '@/lib/sms-commands';
+import { parseCommand, executeCommand, forwardToSalon } from '@/lib/sms-commands';
+import { toE164, auLocalFromE164 } from '@/lib/utils';
 import { env } from '@/lib/env';
 
 export async function POST(request: NextRequest) {
@@ -22,14 +23,33 @@ export async function POST(request: NextRequest) {
   const body = params['Body'] ?? '';
   const messageSid = params['MessageSid'] ?? '';
 
+  // Twilio delivers `From` in E.164 ("+61..."), but client phones may be stored
+  // in local format ("0434 399 728"). Match against both so inbound texts resolve
+  // regardless of how the number was saved.
+  const fromE164 = toE164(from);
+  const fromCandidates = Array.from(
+    new Set(
+      [from, fromE164, ...(fromE164 ? auLocalFromE164(fromE164) : [])].filter(
+        (v): v is string => !!v
+      )
+    )
+  );
+
   const client = await prisma.client.findFirst({
-    where: { phone: from },
+    where: { phone: { in: fromCandidates } },
     include: { salon: { select: { id: true } } },
   });
 
-  const salonId = client?.salonId;
+  // Resolve the salon this message belongs to. Known clients carry it directly;
+  // for unknown senders fall back to the salon that owns the receiving number.
+  // (Single-tenant today: the sole active salon. `To` becomes the lookup key
+  // once numbers are stored per-salon.)
+  const salonId =
+    client?.salonId ??
+    (await prisma.salon.findFirst({ where: { isActive: true }, select: { id: true } }))?.id;
+
   if (!salonId) {
-    return twimlResponse("We couldn't find your account. Please contact the salon directly.");
+    return twimlResponse('Thanks for your message. Please contact the salon directly.');
   }
 
   void logSms({
@@ -38,12 +58,25 @@ export async function POST(request: NextRequest) {
     body,
     status: 'received',
     twilioSid: messageSid,
-    clientId: client.id,
+    clientId: client?.id,
     salonId,
   });
 
+  // Unknown sender: no CRM record, so booking commands (CANCEL/BOOK/STOP) can't
+  // apply. Forward the raw message to the owner so a real person can respond.
+  if (!client) {
+    const replyText = await forwardToSalon({
+      clientPhone: fromE164 ?? from,
+      messageBody: body,
+      salonId,
+    });
+    return twimlResponse(replyText);
+  }
+
   const command = parseCommand(body);
-  const replyText = await executeCommand(from, command, salonId, body);
+  // Use the resolved client's stored phone so the command handler's own lookup
+  // matches, regardless of the format Twilio delivered `From` in.
+  const replyText = await executeCommand(client.phone ?? from, command, salonId, body);
 
   return twimlResponse(replyText);
 }

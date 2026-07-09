@@ -43,3 +43,6 @@ next-env.d.ts
 .turbo
 
 /src/generated/prisma
+
+# Agent working artifacts (plans, screenshots, generated ad assets)
+.gg/

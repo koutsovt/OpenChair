@@ -103,8 +103,9 @@ export async function createPublicBooking(
     return { success: false, error: err instanceof Error ? err.message : 'Booking failed' };
   }
 
-  // Send confirmation SMS (fire-and-forget)
-  if (client.phone) {
+  // Send confirmation SMS (fire-and-forget). Respect opt-out — a returning
+  // client who previously texted STOP must not receive automated messages.
+  if (client.phone && !client.smsOptOut) {
     const smsBody = bookingConfirmationMessage({
       clientName: client.name,
       salonName: salon.name,

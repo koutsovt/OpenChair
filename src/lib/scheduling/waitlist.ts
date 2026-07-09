@@ -79,7 +79,7 @@ export async function notifyWaitlistClient(
 ): Promise<{ notified: boolean }> {
   const entry = await prisma.waitlistEntry.findUnique({
     where: { id: entryId },
-    include: { client: { select: { name: true, phone: true } } },
+    include: { client: { select: { name: true, phone: true, smsOptOut: true } } },
   });
 
   if (!entry || entry.status !== 'WAITING') {
@@ -97,8 +97,8 @@ export async function notifyWaitlistClient(
     },
   });
 
-  // Send SMS if phone available
-  if (entry.client.phone) {
+  // Send SMS if phone available and the client hasn't opted out of messages.
+  if (entry.client.phone && !entry.client.smsOptOut) {
     const date = format(slotDetails.startTime, 'EEEE, d MMMM');
     const time = format(slotDetails.startTime, 'h:mm a');
     const message = `Hi ${entry.client.name}! A slot just opened up at ${slotDetails.salonName}! ${slotDetails.serviceName} with ${slotDetails.stylistName} on ${date} at ${time}. Reply BOOK to claim it.`;

@@ -16,14 +16,9 @@ export function DemoBanner({ userEmail }: DemoBannerProps) {
     <div className="flex items-center justify-center gap-2 bg-amber-400 px-4 py-1.5 text-xs font-medium text-amber-950">
       <span>🎭</span>
       <span>
-        Demo mode — data resets nightly. Sign up at{' '}
-        <a
-          href="https://openchair.dev"
-          className="underline underline-offset-2 hover:opacity-80"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          openchair.dev
+        Demo mode — data resets nightly.{' '}
+        <a href="/sign-up" className="underline underline-offset-2 hover:opacity-80">
+          Sign up
         </a>{' '}
         to get your own salon.
       </span>
