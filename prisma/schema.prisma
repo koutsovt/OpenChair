@@ -105,6 +105,11 @@ model Salon {
 
   apiKey  String?  @unique
 
+  // Google Place ID for this listing — powers the direct "write a review" deep
+  // link (search.google.com/local/writereview?placeid=). Optional because a
+  // salon may not have claimed/verified its Google Business Profile yet.
+  googlePlaceId String?
+
   ownerId String @unique
   owner   User   @relation("SalonOwner", fields: [ownerId], references: [id], onDelete: Cascade)
 
@@ -118,6 +123,7 @@ model Salon {
   smsLogs              SmsLog[]
   products             Product[]
   clientPreferences    ClientPreferredProduct[]
+  reviewRequests       ReviewRequest[]
 
   @@index([slug])
   @@map("salons")
@@ -245,6 +251,15 @@ model Client {
   source    String?   // "walk-in", "instagram", "referral"
   isActive  Boolean   @default(true)
   smsOptOut Boolean   @default(false)
+
+  // Marketing-grade consent (TCPA), separate from smsOptOut. smsOptOut governs
+  // transactional SMS (reminders/confirmations, opt-out by default false =
+  // opted in, since the client provided their number for that purpose).
+  // Review requests solicit a public review — that's marketing under TCPA and
+  // requires its own affirmative opt-in, defaulting to false. STOP still
+  // suppresses both via smsOptOut.
+  reviewSmsConsent Boolean @default(false)
+
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
@@ -265,6 +280,7 @@ model Client {
   waitlistEntries   WaitlistEntry[]
   smsLogs           SmsLog[]
   preferredProducts ClientPreferredProduct[]
+  reviewRequests    ReviewRequest[]
 
   @@index([salonId])
   @@index([phone])
@@ -308,6 +324,7 @@ model Booking {
 
   smsLogs      SmsLog[]
   productsUsed BookingProduct[]
+  reviewRequest ReviewRequest?
 
   @@index([salonId, startTime])
   @@index([stylistId, startTime])
@@ -512,4 +529,43 @@ model ClientPreferredProduct {
   @@index([clientId, label])
   @@index([salonId])
   @@map("client_preferred_products")
+}
+
+// ============================================================
+// REVIEW REQUESTS (post-visit Google review prompts)
+// ============================================================
+//
+// One row per completed booking. Sent to every eligible client identically
+// (no sentiment-based filtering — Google's review-gating policy prohibits
+// selectively soliciting happy customers). `linkToken` is the first-party
+// redirect (/r/{token}) that 302s to the Google "write a review" deep link;
+// `clickedAt` is the closest signal we have to "responded", since Google does
+// not expose which customer authored a public review. Capped at one initial
+// send + one follow-up (see cron/review-requests).
+
+model ReviewRequest {
+  id String @id @default(cuid())
+
+  linkToken String @unique @default(cuid())
+
+  sentAt         DateTime?
+  followUpSentAt DateTime?
+  clickedAt      DateTime?
+
+  bookingId String  @unique
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  salonId String
+  salon   Salon  @relation(fields: [salonId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([salonId])
+  @@index([clientId])
+  @@index([sentAt, followUpSentAt, clickedAt]) // cron follow-up query
+  @@map("review_requests")
 }

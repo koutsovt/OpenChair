@@ -75,6 +75,32 @@ export function waitlistExpiredMessage(params: { clientName: string; salonName: 
   return `Hi ${params.clientName}, the slot we notified you about at ${params.salonName} has expired. We'll let you know when another opens up!`;
 }
 
+/**
+ * Post-visit review request. Deliberately neutral wording — no sentiment
+ * steering ("how happy were you"), no employee-name ask, no incentive. Sent
+ * identically to every eligible client regardless of predicted satisfaction,
+ * per Google's review-gating policy.
+ */
+export function reviewRequestMessage(params: {
+  clientName: string;
+  salonName: string;
+  reviewUrl: string;
+}): string {
+  return `Hi ${params.clientName}, it's ${params.salonName}. Thanks for coming in — if you have a minute, we'd really appreciate your honest thoughts here: ${params.reviewUrl}. Reply STOP to opt out.`;
+}
+
+/**
+ * Single follow-up, sent only if the client hasn't clicked the original link.
+ * Same neutral tone, no added pressure or urgency language.
+ */
+export function reviewRequestFollowUpMessage(params: {
+  clientName: string;
+  salonName: string;
+  reviewUrl: string;
+}): string {
+  return `Hi ${params.clientName}, just circling back — if you get a moment, we'd love your honest thoughts on your visit to ${params.salonName}: ${params.reviewUrl}. Reply STOP to opt out.`;
+}
+
 export function rebookNudgeMessage(params: {
   clientName: string;
   salonName: string;
