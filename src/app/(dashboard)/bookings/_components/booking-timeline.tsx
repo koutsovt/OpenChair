@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useCallback, useRef } from 'react';
+import { useMemo, useState, useCallback, useRef, useEffect } from 'react';
 import { format, differenceInMinutes, addMinutes } from 'date-fns';
 import { UserX } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,7 @@ import { ReassignDialog } from './reassign-dialog';
 import { PastBookingMenu } from './past-booking-menu';
 import { ActiveBookingMenu } from './active-booking-menu';
 import { BookingForm, type BookingPrefill } from './booking-form';
+import { onBookingCreated } from '@/lib/booking-created-event';
 import type { BookingStatus } from '@/types';
 
 type TimelineBooking = {
@@ -80,9 +81,28 @@ export function BookingTimeline({
   const [createPrefill, setCreatePrefill] = useState<BookingPrefill | null>(null);
   const columnRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
-  useMemo(() => {
+  // Keeps the drag-optimistic copy in sync with fresh server data (e.g.
+  // after router.refresh() following a create/reschedule). useEffect, not
+  // useMemo — this is a genuine side effect (setState), and useMemo's
+  // cache is only a performance hint React is allowed to discard; relying
+  // on it running would be relying on an implementation detail.
+  useEffect(() => {
     setOptimisticBookings(bookings);
   }, [bookings]);
+
+  // A booking was just created somewhere on this page (this dialog, the
+  // cell-tap dialog below, or a rebook flow elsewhere) — scroll its
+  // stylist's column into view. On mobile the timeline scrolls
+  // horizontally and often shows only one column at a time, so a booking
+  // landing on an off-screen stylist would otherwise look like it never
+  // saved.
+  useEffect(() => {
+    return onBookingCreated((stylistId) => {
+      columnRefs.current
+        .get(stylistId)
+        ?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+    });
+  }, []);
 
   const hours = useMemo(
     () => Array.from({ length: END_HOUR - START_HOUR }, (_, i) => START_HOUR + i),

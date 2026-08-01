@@ -18,6 +18,7 @@ import {
 } from '@/server/actions/bookings';
 import { searchClients } from '@/server/actions/clients';
 import { formatPrice, formatDuration } from '@/lib/utils';
+import { emitBookingCreated } from '@/lib/booking-created-event';
 
 type ServiceOption = {
   id: string;
@@ -61,6 +62,15 @@ type ClientOption = {
 };
 
 type SlotOption = { start: string; end: string };
+
+// Sticks the Back/Next/Confirm row to the bottom of the dialog's scroll
+// container (DialogContent has p-6 + overflow-y-auto) so it's always
+// reachable without scrolling past the step content — this form runs inside
+// a max-h-[90vh] dialog and steps like 2 and 3 can be tall enough on mobile
+// that the primary action used to require scrolling to find. The negative
+// margins + matching padding pull the footer flush to the dialog's edges and
+// keep it opaque over content scrolling underneath.
+const STICKY_FOOTER = 'sticky bottom-0 -mx-6 -mb-6 flex border-t bg-background px-6 py-4';
 
 // Pre-filled selections, e.g. when rebooking an existing appointment, or
 // tapping an empty cell on the timeline (stylist + exact time known, service
@@ -243,6 +253,10 @@ export function BookingForm({
 
       toast.success('Booking created successfully');
       router.refresh();
+      // Lets a mounted timeline view (possibly a sibling, not an ancestor —
+      // see booking-created-event.ts) scroll the resulting stylist column
+      // into view, in case it's currently scrolled off-screen on mobile.
+      emitBookingCreated(result.stylistId);
       onClose?.();
     });
   }
@@ -356,7 +370,7 @@ export function BookingForm({
           {services.length === 0 && (
             <p className="text-muted-foreground">No services available. Add services first.</p>
           )}
-          <div className="flex justify-end">
+          <div className={`${STICKY_FOOTER} justify-end`}>
             <Button
               onClick={() => {
                 if (singleStylist) {
@@ -423,7 +437,7 @@ export function BookingForm({
           {availableStylists.length === 0 && (
             <p className="text-muted-foreground">No stylists assigned to this service.</p>
           )}
-          <div className="flex justify-between">
+          <div className={`${STICKY_FOOTER} justify-between`}>
             <Button variant="outline" onClick={() => setStep(1)}>
               Back
             </Button>
@@ -483,7 +497,7 @@ export function BookingForm({
               </div>
             </div>
           </div>
-          <div className="flex justify-between">
+          <div className={`${STICKY_FOOTER} justify-between`}>
             <Button
               variant="outline"
               onClick={() => setStep(singleStylist || preselectedStylistUsable ? 1 : 2)}
@@ -579,7 +593,7 @@ export function BookingForm({
             </div>
           )}
 
-          <div className="flex justify-between">
+          <div className={`${STICKY_FOOTER} justify-between`}>
             <Button variant="outline" onClick={() => setStep(3)}>
               Back
             </Button>
@@ -696,7 +710,7 @@ export function BookingForm({
               </Card>
             )}
 
-          <div className="flex justify-between">
+          <div className={`${STICKY_FOOTER} justify-between`}>
             <Button variant="outline" onClick={() => setStep(4)}>
               Back
             </Button>

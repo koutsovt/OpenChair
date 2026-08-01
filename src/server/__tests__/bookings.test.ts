@@ -141,7 +141,7 @@ describe('createBooking', () => {
 
     const result = await createBooking(validData);
 
-    expect(result).toEqual({ success: true, bookingId: 'b1' });
+    expect(result).toEqual({ success: true, bookingId: 'b1', stylistId: 'sty-1' });
     expect(mockServiceFindFirst).toHaveBeenCalledWith({
       where: { id: 'svc-1', salonId: 'salon-1' },
     });
@@ -203,7 +203,7 @@ describe('createBooking', () => {
       stylistId: 'auto',
     });
 
-    expect(result).toEqual({ success: true, bookingId: 'b1' });
+    expect(result).toEqual({ success: true, bookingId: 'b1', stylistId: 'sty-1' });
     expect(mockAutoAssignStylist).toHaveBeenCalledWith(
       'salon-1',
       'svc-1',

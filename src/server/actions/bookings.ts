@@ -28,7 +28,9 @@ export async function createBooking(data: {
   guestPhone?: string;
   startTime: string;
   notes?: string;
-}): Promise<{ success: true; bookingId: string } | { success: false; error: string }> {
+}): Promise<
+  { success: true; bookingId: string; stylistId: string } | { success: false; error: string }
+> {
   const salon = await getAuthenticatedSalon();
 
   const parsed = createBookingSchema.safeParse(data);
@@ -134,7 +136,7 @@ export async function createBooking(data: {
   }
 
   revalidatePath('/bookings');
-  return { success: true, bookingId: booking.id };
+  return { success: true, bookingId: booking.id, stylistId: stylist.id };
 }
 
 /**
