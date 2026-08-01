@@ -1,6 +1,7 @@
 import { addDays, startOfDay, endOfDay } from 'date-fns';
 import { prisma } from '@/lib/prisma';
 import { getAvailableSlots } from '@/lib/slots';
+import { toSalonZoned } from '@/lib/timezone';
 import type { SuggestedSlot } from '@/types';
 
 /**
@@ -51,10 +52,15 @@ export async function getSuggestedSlots(
   const cappedLimit = Math.min(limit, 20);
   const suggestions: SuggestedSlot[] = [];
 
-  // Iterate through each day in the range (capped at 14 days)
-  let currentDate = startOfDay(startDate);
-  const maxDate = addDays(startOfDay(startDate), 14);
-  const lastDate = startOfDay(endDate) > maxDate ? maxDate : startOfDay(endDate);
+  // Iterate through each day in the range (capped at 14 days). Day
+  // boundaries must be read in the salon's timezone, not the server's —
+  // see lib/timezone.ts — or a suggestion could be scored/placed against
+  // the wrong calendar day's existing bookings.
+  const zonedStartDate = toSalonZoned(startDate, salon.timezone);
+  const zonedEndDate = toSalonZoned(endDate, salon.timezone);
+  let currentDate = startOfDay(zonedStartDate);
+  const maxDate = addDays(startOfDay(zonedStartDate), 14);
+  const lastDate = startOfDay(zonedEndDate) > maxDate ? maxDate : startOfDay(zonedEndDate);
 
   while (currentDate <= lastDate && suggestions.length < cappedLimit * 3) {
     const dayStart = startOfDay(currentDate);

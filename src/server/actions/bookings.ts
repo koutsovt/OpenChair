@@ -3,9 +3,10 @@
 import { revalidatePath } from 'next/cache';
 import { addMinutes, startOfDay, endOfDay } from 'date-fns';
 import { prisma } from '@/lib/prisma';
-import { validateBooking, findConflictingBooking } from '@/lib/booking-validation';
-import { createBookingCore } from '@/server/services/booking-service';
+import { findConflictingBooking } from '@/lib/booking-validation';
+import { createBookingCore, rescheduleBookingCore } from '@/server/services/booking-service';
 import { getAvailableSlots } from '@/lib/slots';
+import { salonDayBounds, toSalonZoned } from '@/lib/timezone';
 import { createBookingSchema } from '@/lib/validations/booking';
 import { sendSMS, logSms } from '@/lib/twilio';
 import {
@@ -136,6 +137,7 @@ export async function createBooking(data: {
   }
 
   revalidatePath('/bookings');
+  revalidatePath('/dashboard');
   return { success: true, bookingId: booking.id, stylistId: stylist.id };
 }
 
@@ -235,6 +237,7 @@ export async function updateBookingStatus(
 
   revalidatePath('/bookings');
   revalidatePath(`/bookings/${id}`);
+  revalidatePath('/dashboard');
   return { success: true };
 }
 
@@ -363,20 +366,17 @@ export async function rescheduleBooking(
   const start = new Date(newStartTime);
   const end = addMinutes(start, booking.service.duration);
 
-  const conflict = await validateBooking(targetStylistId, start, end, id);
-  if (conflict) {
-    return { success: false, error: conflict };
-  }
-
-  const updatedBooking = await prisma.booking.update({
-    where: { id },
-    data: {
+  let updatedBooking;
+  try {
+    updatedBooking = await rescheduleBookingCore({
+      bookingId: id,
+      stylistId: targetStylistId,
       startTime: start,
       endTime: end,
-      stylistId: targetStylistId,
-    },
-    include: { stylist: true, service: true },
-  });
+    });
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : 'Reschedule failed' };
+  }
 
   // Send rescheduled SMS to client (skip opted-out clients; guests always sent)
   const phone = booking.client?.phone ?? booking.guestPhone;
@@ -405,6 +405,7 @@ export async function rescheduleBooking(
 
   revalidatePath('/bookings');
   revalidatePath(`/bookings/${id}`);
+  revalidatePath('/dashboard');
   return { success: true };
 }
 
@@ -428,7 +429,11 @@ export async function getAvailableSlotsAction(
 
   if (!service) return [];
 
-  const targetDate = new Date(date);
+  // `date` is an arbitrary instant (client sends `date.toISOString()`) — read
+  // its calendar day as observed in the salon's timezone, not the server's,
+  // so the query window and slot-generation window agree with what staff see
+  // on screen. See lib/timezone.ts.
+  const targetDate = toSalonZoned(date, salon.timezone);
   const dayStart = startOfDay(targetDate);
   const dayEnd = endOfDay(targetDate);
 
@@ -478,7 +483,11 @@ export async function getSlotAlternativesAction(
 
   const start = new Date(startTime);
   const end = addMinutes(start, service.duration);
-  const dayOfWeek = start.getDay();
+  // Day-of-week and day-window below must be read in the salon's timezone
+  // (see lib/timezone.ts) — `start` itself stays a plain instant for the
+  // exact-slot conflict check just below, which is timezone-independent.
+  const zonedStart = toSalonZoned(start, salon.timezone);
+  const dayOfWeek = zonedStart.getDay();
 
   // Stylists who offer this service and are rostered on this day
   const stylists = await prisma.stylist.findMany({
@@ -507,8 +516,8 @@ export async function getSlotAlternativesAction(
     salon.id,
     serviceId,
     undefined,
-    startOfDay(start),
-    endOfDay(start),
+    startOfDay(zonedStart),
+    endOfDay(zonedStart),
     20
   );
   const nearbySlots = suggestions
@@ -556,9 +565,10 @@ export async function reassignStylistBookings(
     }
   }
 
-  const targetDate = new Date(date);
-  const dayStart = startOfDay(targetDate);
-  const dayEnd = endOfDay(targetDate);
+  // `date` is a "YYYY-MM-DD" calendar day (from the bookings page URL) —
+  // resolve its boundaries in the salon's timezone, not the server's. See
+  // lib/timezone.ts.
+  const { start: dayStart, end: dayEnd } = salonDayBounds(date, salon.timezone);
 
   const bookings = await prisma.booking.findMany({
     where: {
@@ -595,17 +605,6 @@ export async function reassignStylistBookings(
       newStylistId = assignment.stylistId;
     }
 
-    const conflict = await validateBooking(
-      newStylistId,
-      booking.startTime,
-      booking.endTime,
-      booking.id
-    );
-    if (conflict) {
-      failed.push({ bookingId: booking.id, error: conflict });
-      continue;
-    }
-
     const hasService = await prisma.stylistService.findUnique({
       where: {
         stylistId_serviceId: { stylistId: newStylistId, serviceId: booking.serviceId },
@@ -616,11 +615,26 @@ export async function reassignStylistBookings(
       continue;
     }
 
-    const updated = await prisma.booking.update({
-      where: { id: booking.id },
-      data: { stylistId: newStylistId },
-      include: { stylist: true },
-    });
+    // Atomic validate+update (lock + transaction) — see rescheduleBookingCore.
+    // Without this, reassigning several affected bookings concurrently (or
+    // racing a manual reschedule/drag happening at the same time) could each
+    // pass a conflict check before either commits, producing real
+    // overlapping bookings for the target stylist.
+    let updated;
+    try {
+      updated = await rescheduleBookingCore({
+        bookingId: booking.id,
+        stylistId: newStylistId,
+        startTime: booking.startTime,
+        endTime: booking.endTime,
+      });
+    } catch (err) {
+      failed.push({
+        bookingId: booking.id,
+        error: err instanceof Error ? err.message : 'Reassignment failed',
+      });
+      continue;
+    }
 
     const phone = booking.client?.phone ?? booking.guestPhone;
     if (phone && !booking.client?.smsOptOut) {
@@ -650,6 +664,7 @@ export async function reassignStylistBookings(
   }
 
   revalidatePath('/bookings');
+  revalidatePath('/dashboard');
   return { success: true, reassigned, failed };
 }
 

@@ -1,7 +1,8 @@
-import { format, startOfDay, endOfDay } from 'date-fns';
+import { format } from 'date-fns';
 import { CalendarDays } from 'lucide-react';
 import { getAuthenticatedSalon } from '@/server/auth';
 import { prisma } from '@/lib/prisma';
+import { salonDayBounds, salonTodayStr } from '@/lib/timezone';
 import { Card, CardContent } from '@/components/ui/card';
 import { BlurText } from '@/components/ui/blur-text';
 import { DatePickerNav } from './_components/date-picker-nav';
@@ -18,16 +19,23 @@ export default async function BookingsPage({
   const params = await searchParams;
   const salon = await getAuthenticatedSalon();
 
-  const dateStr = params.date ?? format(new Date(), 'yyyy-MM-dd');
-  const targetDate = new Date(dateStr);
+  // Both the default "today" and the day-boundary query below are computed
+  // in the salon's timezone, not the server process's — see lib/timezone.ts.
+  const dateStr = params.date ?? salonTodayStr(salon.timezone);
+  const {
+    start: dayStart,
+    end: dayEnd,
+    dayOfWeek,
+    zonedDate,
+  } = salonDayBounds(dateStr, salon.timezone);
   const view = (params.view === 'timeline' ? 'timeline' : 'list') as 'list' | 'timeline';
 
   // Fetch day's bookings
   const bookings = await prisma.booking.findMany({
     where: {
       salonId: salon.id,
-      startTime: { gte: startOfDay(targetDate) },
-      endTime: { lte: endOfDay(targetDate) },
+      startTime: { gte: dayStart },
+      endTime: { lte: dayEnd },
     },
     include: { client: true, stylist: true, service: true },
     orderBy: { startTime: 'asc' },
@@ -78,7 +86,6 @@ export default async function BookingsPage({
   }
 
   // All active stylists for timeline (include availability)
-  const dayOfWeek = targetDate.getDay(); // 0=Sunday..6=Saturday
   const stylists = await prisma.stylist.findMany({
     where: { salonId: salon.id, isActive: true },
     orderBy: { sortOrder: 'asc' },
@@ -121,7 +128,7 @@ export default async function BookingsPage({
           <BlurText text="Bookings" className="text-2xl font-bold tracking-tight" />
           <p className="text-muted-foreground">
             {bookingRows.length} booking{bookingRows.length !== 1 ? 's' : ''} on{' '}
-            {format(targetDate, 'd MMM yyyy')}
+            {format(zonedDate, 'd MMM yyyy')}
           </p>
         </div>
         <NewBookingDialog services={serviceOptions} stylistsByService={stylistsByService} />
@@ -149,6 +156,7 @@ export default async function BookingsPage({
           date={dateStr}
           services={serviceOptions}
           stylistsByService={stylistsByService}
+          timezone={salon.timezone}
         />
       )}
     </div>

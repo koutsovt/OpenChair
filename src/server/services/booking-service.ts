@@ -58,3 +58,50 @@ export async function createBookingCore(params: CreateBookingParams) {
     })
   );
 }
+
+interface RescheduleBookingParams {
+  bookingId: string;
+  stylistId: string;
+  startTime: Date;
+  endTime: Date;
+}
+
+/**
+ * Atomically validate and apply a reschedule (time and/or stylist change)
+ * inside a $transaction, mirroring createBookingCore's protection.
+ *
+ * Without this, rescheduleBooking and reassignStylistBookings called
+ * validateBooking + prisma.booking.update as two unguarded steps: two
+ * concurrent reschedules for the same stylist (e.g. dragging a block on the
+ * timeline while another tab/device reschedules a different booking onto an
+ * overlapping time) could each pass the conflict check before either
+ * commits, producing real overlapping bookings in the database.
+ */
+export async function rescheduleBookingCore(params: RescheduleBookingParams) {
+  const lockKey = `${params.stylistId}:${params.startTime.toISOString()}`;
+  return withLock(lockKey, () =>
+    prisma.$transaction(async (tx) => {
+      const conflict = await validateBooking(
+        params.stylistId,
+        params.startTime,
+        params.endTime,
+        params.bookingId,
+        tx
+      );
+
+      if (conflict) {
+        throw new Error(conflict);
+      }
+
+      return tx.booking.update({
+        where: { id: params.bookingId },
+        data: {
+          startTime: params.startTime,
+          endTime: params.endTime,
+          stylistId: params.stylistId,
+        },
+        include: { stylist: true, service: true },
+      });
+    })
+  );
+}

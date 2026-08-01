@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useTransition, useEffect, useCallback } from 'react';
+import { useState, useMemo, useTransition, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
 import { Button } from '@/components/ui/button';
@@ -115,6 +115,25 @@ export function BookingForm({
   // `prefill` only seeds initial state. Used to auto-select the tapped slot
   // once real availability for the chosen service/stylist is fetched.
   const [prefilledSlotStart] = useState(prefill?.slotStart ?? '');
+  // A cell was tapped on the timeline — the time is already chosen, so once
+  // that exact slot is confirmed still available, step 3 (date & time) is
+  // skipped automatically instead of making the user tap Next on a screen
+  // that has nothing left to decide. Guarded by a ref (not state) so it
+  // fires exactly once and never re-triggers if the user manually goes Back
+  // to step 3 afterwards to pick a different time.
+  const autoAdvancedFromTappedSlotRef = useRef(false);
+  // True once we've checked and the tapped slot is no longer available (e.g.
+  // someone else booked it in the meantime) — falls back to the normal
+  // manual step 3 UI so the user can pick another time.
+  const [tappedSlotUnavailable, setTappedSlotUnavailable] = useState(false);
+  // Kept in sync so the slots-fetch effect (below) can read the current
+  // clientId without needing it in its dependency array — adding it there
+  // would refetch slots on every client selection, which is unrelated to
+  // what that effect does.
+  const clientIdRef = useRef(clientId);
+  useEffect(() => {
+    clientIdRef.current = clientId;
+  }, [clientId]);
 
   // Loaded data
   const [slots, setSlots] = useState<SlotOption[]>([]);
@@ -159,7 +178,25 @@ export function BookingForm({
         // `prev ||` so it never clobbers a choice the user already made.
         if (prefilledSlotStart) {
           const match = fetchedSlots.find((s) => s.start === prefilledSlotStart);
-          if (match) setSlotStart((prev) => prev || match.start);
+          if (match) {
+            setSlotStart((prev) => prev || match.start);
+            if (!autoAdvancedFromTappedSlotRef.current) {
+              autoAdvancedFromTappedSlotRef.current = true;
+              // This effect fires as soon as the (prefilled) stylist and a
+              // service are both set — which happens while the user is
+              // still on step 1, before they ever reach step 3. So "only
+              // advance if step === 3" silently never fires: by the time
+              // step 3 is reached, the one-shot ref above has already been
+              // consumed. Any step 1–3 is still "time not yet confirmed",
+              // so jump forward from any of them; steps 4/5 are untouched
+              // since the user has already moved past slot selection.
+              setStep((s) => (s <= 3 ? (clientIdRef.current ? 5 : 4) : s));
+            }
+          } else if (!autoAdvancedFromTappedSlotRef.current) {
+            // Tapped slot is no longer free (e.g. booked by someone else in
+            // the meantime) — fall back to letting the user pick manually.
+            setTappedSlotUnavailable(true);
+          }
         }
       })
       .finally(() => setLoadingSlots(false));
@@ -448,68 +485,96 @@ export function BookingForm({
         </div>
       )}
 
-      {/* Step 3: Select Date & Time */}
-      {step === 3 && (
-        <div className="space-y-4">
-          <h3 className="text-lg font-semibold">Pick date & time</h3>
-          <div className="flex flex-col gap-4 sm:flex-row">
-            <Calendar
-              mode="single"
-              selected={date}
-              onSelect={setDate}
-              disabled={(d) => d < new Date(new Date().setHours(0, 0, 0, 0))}
-            />
-            <div className="flex-1 space-y-2">
-              {loadingSlots && <p className="text-sm text-muted-foreground">Loading slots…</p>}
-              {!loadingSlots && date && slots.length === 0 && (
-                <p className="text-sm text-muted-foreground">No available slots on this date.</p>
-              )}
-              {suggestions.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-primary">Recommended times</p>
-                  <div className="grid grid-cols-3 gap-2">
-                    {suggestions.map((s) => (
-                      <Button
-                        key={s.start}
-                        variant={slotStart === s.start ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => setSlotStart(s.start)}
-                        className="h-auto flex-col py-1.5"
-                      >
-                        <span>{format(new Date(s.start), 'HH:mm')}</span>
-                        <span className="text-[10px] opacity-70">{s.reason}</span>
-                      </Button>
-                    ))}
+      {/* Step 3: Select Date & Time — a tapped timeline cell already chose the
+          time, so this renders only a brief "confirming" placeholder while
+          the effect above re-validates the slot, instead of the full
+          calendar/slot picker. Falls through to the normal picker below if
+          that slot turned out to be taken. */}
+      {step === 3 &&
+        prefilledSlotStart &&
+        !autoAdvancedFromTappedSlotRef.current &&
+        !tappedSlotUnavailable && (
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold">Confirming your time…</h3>
+            <p className="text-sm text-muted-foreground">
+              {format(new Date(prefilledSlotStart), 'EEE d MMM, HH:mm')}
+              {selectedStylist ? ` with ${selectedStylist.name}` : ''} — checking it&apos;s still
+              free.
+            </p>
+          </div>
+        )}
+
+      {step === 3 &&
+        !(
+          prefilledSlotStart &&
+          !autoAdvancedFromTappedSlotRef.current &&
+          !tappedSlotUnavailable
+        ) && (
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold">Pick date & time</h3>
+            {tappedSlotUnavailable && (
+              <p className="text-sm text-amber-600">
+                That exact time isn&apos;t available anymore — pick another below.
+              </p>
+            )}
+            <div className="flex flex-col gap-4 sm:flex-row">
+              <Calendar
+                mode="single"
+                selected={date}
+                onSelect={setDate}
+                disabled={(d) => d < new Date(new Date().setHours(0, 0, 0, 0))}
+              />
+              <div className="flex-1 space-y-2">
+                {loadingSlots && <p className="text-sm text-muted-foreground">Loading slots…</p>}
+                {!loadingSlots && date && slots.length === 0 && (
+                  <p className="text-sm text-muted-foreground">No available slots on this date.</p>
+                )}
+                {suggestions.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium text-primary">Recommended times</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {suggestions.map((s) => (
+                        <Button
+                          key={s.start}
+                          variant={slotStart === s.start ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => setSlotStart(s.start)}
+                          className="h-auto flex-col py-1.5"
+                        >
+                          <span>{format(new Date(s.start), 'HH:mm')}</span>
+                          <span className="text-[10px] opacity-70">{s.reason}</span>
+                        </Button>
+                      ))}
+                    </div>
                   </div>
+                )}
+                <div className="grid grid-cols-3 gap-2">
+                  {slots.map((s) => (
+                    <Button
+                      key={s.start}
+                      variant={slotStart === s.start ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setSlotStart(s.start)}
+                    >
+                      {format(new Date(s.start), 'HH:mm')}
+                    </Button>
+                  ))}
                 </div>
-              )}
-              <div className="grid grid-cols-3 gap-2">
-                {slots.map((s) => (
-                  <Button
-                    key={s.start}
-                    variant={slotStart === s.start ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setSlotStart(s.start)}
-                  >
-                    {format(new Date(s.start), 'HH:mm')}
-                  </Button>
-                ))}
               </div>
             </div>
+            <div className={`${STICKY_FOOTER} justify-between`}>
+              <Button
+                variant="outline"
+                onClick={() => setStep(singleStylist || preselectedStylistUsable ? 1 : 2)}
+              >
+                Back
+              </Button>
+              <Button onClick={() => setStep(clientId ? 5 : 4)} disabled={!slotStart}>
+                Next
+              </Button>
+            </div>
           </div>
-          <div className={`${STICKY_FOOTER} justify-between`}>
-            <Button
-              variant="outline"
-              onClick={() => setStep(singleStylist || preselectedStylistUsable ? 1 : 2)}
-            >
-              Back
-            </Button>
-            <Button onClick={() => setStep(clientId ? 5 : 4)} disabled={!slotStart}>
-              Next
-            </Button>
-          </div>
-        </div>
-      )}
+        )}
 
       {/* Step 4: Client */}
       {step === 4 && (

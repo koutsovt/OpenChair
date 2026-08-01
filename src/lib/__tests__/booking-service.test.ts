@@ -1,12 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mockCreate = vi.fn();
+const mockUpdate = vi.fn();
 const mockValidateBooking = vi.fn();
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     $transaction: vi.fn((cb: (tx: unknown) => Promise<unknown>) =>
-      cb({ booking: { create: mockCreate } })
+      cb({ booking: { create: mockCreate, update: mockUpdate } })
     ),
   },
 }));
@@ -15,7 +16,7 @@ vi.mock('@/lib/booking-validation', () => ({
   validateBooking: (...args: unknown[]) => mockValidateBooking(...args),
 }));
 
-import { createBookingCore } from '@/server/services/booking-service';
+import { createBookingCore, rescheduleBookingCore } from '@/server/services/booking-service';
 
 const baseParams = {
   stylistId: 'stylist-1',
@@ -30,6 +31,7 @@ const baseParams = {
 
 beforeEach(() => {
   mockCreate.mockReset();
+  mockUpdate.mockReset();
   mockValidateBooking.mockReset();
 });
 
@@ -128,5 +130,77 @@ describe('createBookingCore', () => {
     expect(data.clientId).toBeNull();
     expect(data.guestName).toBeNull();
     expect(data.guestPhone).toBeNull();
+  });
+});
+
+describe('rescheduleBookingCore', () => {
+  const rescheduleParams = {
+    bookingId: 'booking-1',
+    stylistId: 'stylist-1',
+    startTime: new Date('2026-04-01T10:00:00Z'),
+    endTime: new Date('2026-04-01T11:00:00Z'),
+  };
+
+  it('updates booking when no conflict', async () => {
+    mockValidateBooking.mockResolvedValue(null);
+    const fakeBooking = { id: 'booking-1', ...rescheduleParams };
+    mockUpdate.mockResolvedValue(fakeBooking);
+
+    const result = await rescheduleBookingCore(rescheduleParams);
+
+    expect(result).toEqual(fakeBooking);
+    // excludeBookingId (4th arg) must be the booking being moved, so it
+    // never conflicts with its own pre-move row.
+    expect(mockValidateBooking).toHaveBeenCalledWith(
+      rescheduleParams.stylistId,
+      rescheduleParams.startTime,
+      rescheduleParams.endTime,
+      rescheduleParams.bookingId,
+      expect.objectContaining({ booking: expect.anything() })
+    );
+    expect(mockUpdate).toHaveBeenCalledWith({
+      where: { id: rescheduleParams.bookingId },
+      data: {
+        startTime: rescheduleParams.startTime,
+        endTime: rescheduleParams.endTime,
+        stylistId: rescheduleParams.stylistId,
+      },
+      include: { stylist: true, service: true },
+    });
+  });
+
+  it('throws error and never updates when conflict exists', async () => {
+    mockValidateBooking.mockResolvedValue('This time slot conflicts with an existing booking');
+
+    await expect(rescheduleBookingCore(rescheduleParams)).rejects.toThrow(
+      'This time slot conflicts with an existing booking'
+    );
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it('serializes two concurrent reschedules onto the same stylist+time so only one wins', async () => {
+    // Simulates the exact race this function exists to prevent: two
+    // reschedules targeting the same stylist and start time, racing each
+    // other. Without the lock in withLock (keyed by stylistId+startTime),
+    // both could read "no conflict" before either commits.
+    let bookedSlot: string | null = null;
+    mockValidateBooking.mockImplementation((stylistId: string, startTime: Date) => {
+      const key = `${stylistId}:${startTime.toISOString()}`;
+      return Promise.resolve(bookedSlot === key ? 'This time slot conflicts' : null);
+    });
+    mockUpdate.mockImplementation(({ data }: { data: { stylistId: string; startTime: Date } }) => {
+      bookedSlot = `${data.stylistId}:${data.startTime.toISOString()}`;
+      return Promise.resolve({ id: 'booking-x' });
+    });
+
+    const results = await Promise.allSettled([
+      rescheduleBookingCore({ ...rescheduleParams, bookingId: 'booking-a' }),
+      rescheduleBookingCore({ ...rescheduleParams, bookingId: 'booking-b' }),
+    ]);
+
+    const fulfilled = results.filter((r) => r.status === 'fulfilled');
+    const rejected = results.filter((r) => r.status === 'rejected');
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
   });
 });

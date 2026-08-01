@@ -8,12 +8,14 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { bookingStatusStyle } from '@/lib/booking-status-styles';
 import { rescheduleBooking } from '@/server/actions/bookings';
 import { toast } from 'sonner';
+import { TZDate } from '@date-fns/tz';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ReassignDialog } from './reassign-dialog';
 import { PastBookingMenu } from './past-booking-menu';
 import { ActiveBookingMenu } from './active-booking-menu';
 import { BookingForm, type BookingPrefill } from './booking-form';
 import { onBookingCreated } from '@/lib/booking-created-event';
+import { DEFAULT_SLOT_INTERVAL } from '@/lib/constants';
 import type { BookingStatus } from '@/types';
 
 type TimelineBooking = {
@@ -57,12 +59,14 @@ export function BookingTimeline({
   date,
   services,
   stylistsByService,
+  timezone,
 }: {
   bookings: TimelineBooking[];
   stylists: StylistColumn[];
   date: string;
   services: ServiceOption[];
   stylistsByService: Record<string, StylistOption[]>;
+  timezone: string;
 }) {
   const [dragState, setDragState] = useState<{
     bookingId: string;
@@ -256,27 +260,48 @@ export function BookingTimeline({
 
       const rect = column.getBoundingClientRect();
       const y = e.clientY - rect.top;
-      const snappedMinutes = pxToSnappedMinutes(y);
+      // Snapped to DEFAULT_SLOT_INTERVAL (30min), not the finer drag-reschedule
+      // SNAP_MINUTES (15min) used elsewhere in this file — getAvailableSlots
+      // only ever generates slots on that interval, so snapping any finer here
+      // would let a tap land between two real slots, which then can never be
+      // found by BookingForm's exact-match check and always looks like the
+      // slot was "just booked by someone else" even though nobody ever could
+      // have booked a time that was never a valid slot in the first place.
+      const totalMinutes = (y / HOUR_HEIGHT) * 60 + START_HOUR * 60;
+      const snappedMinutes =
+        Math.round(totalMinutes / DEFAULT_SLOT_INTERVAL) * DEFAULT_SLOT_INTERVAL;
 
       const [year, month, day] = date.split('-').map(Number);
-      const slotStart = new Date(
+      // Must be built in the salon's timezone (matching lib/slots.ts), not
+      // the viewing device's local timezone — otherwise a tap on the "10:00"
+      // cell produces a different real instant than the salon's actual
+      // 10:00 slot whenever the browser's TZ differs from the salon's,
+      // silently failing to match any slot BookingForm fetches and forcing
+      // it to fall back to the full manual picker.
+      const slotStart = new TZDate(
         year,
         month - 1,
         day,
         Math.floor(snappedMinutes / 60),
         snappedMinutes % 60,
         0,
-        0
+        0,
+        timezone
       );
 
       setCreatePrefill({
         stylistId: stylist.id,
         stylistName: stylist.name,
         defaultDate: new Date(year, month - 1, day),
-        slotStart: slotStart.toISOString(),
+        // TZDate#toISOString() renders with a zone-offset suffix (e.g.
+        // "+10:00"), not "Z" — wrapping in a plain Date first normalizes to
+        // standard UTC/"Z" form. Without this, the string never matches the
+        // server's plain-Date-generated slot times in BookingForm's exact
+        // string comparison, even though both represent the same instant.
+        slotStart: new Date(slotStart).toISOString(),
       });
     },
-    [date]
+    [date, timezone]
   );
 
   return (
