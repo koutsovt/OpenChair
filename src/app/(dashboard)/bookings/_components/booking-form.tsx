@@ -234,6 +234,37 @@ export function BookingForm({
     book(stylistId, slotStart);
   }
 
+  // There's no <form> here (it's a multi-step wizard, not one submit), so
+  // without this, pressing Enter/Go on a mobile keyboard does nothing —
+  // the user has to dismiss the keyboard and hunt for the Next/Confirm
+  // button by hand, which is what made the form feel slow to fill in on
+  // mobile. This mirrors whatever the currently-visible primary button
+  // would do, using the same enabled/disabled conditions as that button.
+  function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (e.key !== 'Enter') return;
+    // Notes is a <textarea> — Enter there must insert a newline, never submit.
+    if ((e.target as HTMLElement).tagName === 'TEXTAREA') return;
+    e.preventDefault();
+
+    if (step === 1) {
+      if (!serviceId) return;
+      if (singleStylist) {
+        setStylistId(availableStylists[0].id);
+        setStep(3);
+      } else {
+        setStep(2);
+      }
+    } else if (step === 2) {
+      if (stylistId) setStep(3);
+    } else if (step === 3) {
+      if (slotStart) setStep(clientId ? 5 : 4);
+    } else if (step === 4) {
+      if (isGuest ? guestName : clientId) setStep(5);
+    } else if (step === 5) {
+      if (!isPending) handleSubmit();
+    }
+  }
+
   const selectedStylist = availableStylists.find((s) => s.id === stylistId);
   const selectedClient = clients.find((c) => c.id === clientId);
   // With a single qualified stylist there is nothing to choose — skip step 2.
@@ -256,7 +287,7 @@ export function BookingForm({
     preferredStylist && slotStart ? isAllocatedAt(preferredStylist, new Date(slotStart)) : false;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" onKeyDown={handleKeyDown}>
       {/* Step indicators */}
       <div className="flex gap-2">
         {[1, 2, 3, 4, 5].map((s) => (
@@ -503,6 +534,8 @@ export function BookingForm({
               <div>
                 <Label>Phone (optional)</Label>
                 <Input
+                  type="tel"
+                  inputMode="tel"
                   value={guestPhone}
                   onChange={(e) => setGuestPhone(e.target.value)}
                   placeholder="0412 345 678"

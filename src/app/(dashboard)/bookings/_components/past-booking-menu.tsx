@@ -12,17 +12,30 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { sendRebookNudge } from '@/server/actions/bookings';
+import { useLongPress, type LongPressHandlers } from '@/hooks/useLongPress';
 import type { BookingStatus } from '@/types';
 
+// Shared shape for the handlers PastBookingMenu hands to its render prop, so
+// callers (booking-list, booking-timeline) can type their own wrapped
+// elements against one definition instead of re-declaring it per call site.
+export type PastBookingMenuProps = {
+  onContextMenu: (e: React.MouseEvent) => void;
+} & LongPressHandlers;
+
 /**
- * Right-click context menu for a past (terminal) appointment. The row's inline
- * action menu hides for terminal statuses, so this fills that gap with the
- * actions that still make sense after a visit: view, rebook, and (for completed
- * visits) send a rebooking nudge.
+ * Context menu for a past (terminal) appointment, opened by desktop
+ * right-click OR mobile long-press. The row's inline action menu hides for
+ * terminal statuses, so this fills that gap with the actions that still make
+ * sense after a visit: view, rebook, and (for completed visits) send a
+ * rebooking nudge.
  *
- * Uses a render prop so the caller keeps ownership of the `<TableRow>` element
- * (no invalid DOM injected between `<tbody>` and `<tr>`); we only attach the
- * cursor handler and an off-screen anchored trigger.
+ * Touch support exists because iOS Safari (and most mobile browsers) never
+ * fire the native `contextmenu` DOM event on long-press — see useLongPress.
+ * Without it, the menu simply never appeared on a phone or tablet.
+ *
+ * Uses a render prop so the caller keeps ownership of the target element (no
+ * invalid DOM injected between e.g. `<tbody>` and `<tr>`); we only attach the
+ * event handlers and an off-screen anchored trigger.
  */
 export function PastBookingMenu({
   bookingId,
@@ -31,7 +44,7 @@ export function PastBookingMenu({
 }: {
   bookingId: string;
   status: BookingStatus;
-  children: (props: { onContextMenu: (e: React.MouseEvent) => void }) => React.ReactNode;
+  children: (props: PastBookingMenuProps) => React.ReactNode;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -43,6 +56,11 @@ export function PastBookingMenu({
     setPoint({ x: e.clientX, y: e.clientY });
     setOpen(true);
   };
+
+  const longPressHandlers = useLongPress((p) => {
+    setPoint(p);
+    setOpen(true);
+  });
 
   const handleNudge = () => {
     setOpen(false);
@@ -92,7 +110,7 @@ export function PastBookingMenu({
 
   return (
     <>
-      {children({ onContextMenu })}
+      {children({ onContextMenu, ...longPressHandlers })}
       {menu}
     </>
   );

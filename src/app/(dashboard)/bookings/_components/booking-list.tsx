@@ -15,7 +15,7 @@ import { bookingStatusStyle } from '@/lib/booking-status-styles';
 import { formatPrice } from '@/lib/utils';
 import { Repeat } from 'lucide-react';
 import { BookingActions } from './booking-actions';
-import { PastBookingMenu } from './past-booking-menu';
+import { PastBookingMenu, type PastBookingMenuProps } from './past-booking-menu';
 import type { BookingStatus } from '@/types';
 
 const TERMINAL_STATUSES: BookingStatus[] = ['COMPLETED', 'CANCELLED', 'NO_SHOW'];
@@ -56,11 +56,14 @@ export function BookingList({ bookings }: { bookings: BookingRow[] }) {
       <TableBody>
         {bookings.map((b) => {
           const isPast = TERMINAL_STATUSES.includes(b.status);
-          const renderRow = (onContextMenu?: (e: React.MouseEvent) => void) => (
+          const renderRow = (menuProps?: PastBookingMenuProps) => (
             <TableRow
               key={b.id}
-              onContextMenu={onContextMenu}
-              className={onContextMenu ? 'cursor-context-menu' : undefined}
+              {...menuProps}
+              className={menuProps ? 'cursor-context-menu' : undefined}
+              // Long-press opens our own menu — suppress iOS's native
+              // text-selection callout so it doesn't fight ours.
+              style={menuProps ? { WebkitTouchCallout: 'none', userSelect: 'none' } : undefined}
             >
               <TableCell className="font-mono text-sm">
                 <Link href={`/bookings/${b.id}`} className="hover:underline">
@@ -98,7 +101,7 @@ export function BookingList({ bookings }: { bookings: BookingRow[] }) {
           // right-click context menu instead.
           return isPast ? (
             <PastBookingMenu key={b.id} bookingId={b.id} status={b.status}>
-              {({ onContextMenu }) => renderRow(onContextMenu)}
+              {(menuProps) => renderRow(menuProps)}
             </PastBookingMenu>
           ) : (
             renderRow()

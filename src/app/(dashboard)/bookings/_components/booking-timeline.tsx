@@ -9,6 +9,7 @@ import { bookingStatusStyle } from '@/lib/booking-status-styles';
 import { rescheduleBooking } from '@/server/actions/bookings';
 import { toast } from 'sonner';
 import { ReassignDialog } from './reassign-dialog';
+import { PastBookingMenu, type PastBookingMenuProps } from './past-booking-menu';
 import type { BookingStatus } from '@/types';
 
 type TimelineBooking = {
@@ -313,13 +314,14 @@ export function BookingTimeline({
                     const isCompact = rawHeight < 45;
                     const timeStr = `${format(new Date(b.startTime), 'HH:mm')}–${format(new Date(b.endTime), 'HH:mm')}`;
 
-                    return (
+                    const block = (menuProps?: PastBookingMenuProps) => (
                       <Tooltip key={b.id}>
                         <TooltipTrigger asChild>
                           <div
                             draggable={!terminal}
                             onDragStart={(e) => handleDragStart(e, b)}
                             onDragEnd={handleDragEnd}
+                            {...menuProps}
                             className={`absolute inset-x-1 overflow-hidden rounded-md border px-2 py-1 shadow-sm ${bookingStatusStyle(b.status).block} ${
                               terminal
                                 ? 'cursor-default opacity-60'
@@ -329,6 +331,11 @@ export function BookingTimeline({
                               top: getTopPx(b.startTime),
                               height: blockHeight,
                               zIndex: isDragging ? 50 : 10,
+                              // Long-press opens our own menu on terminal blocks
+                              // — suppress iOS's native text-selection callout.
+                              ...(menuProps
+                                ? { WebkitTouchCallout: 'none', userSelect: 'none' }
+                                : {}),
                             }}
                           >
                             {isCompact ? (
@@ -356,6 +363,18 @@ export function BookingTimeline({
                           </div>
                         </TooltipContent>
                       </Tooltip>
+                    );
+
+                    // Terminal (past) bookings aren't draggable and have no
+                    // other interaction — give them the same context menu the
+                    // list view uses (view / rebook / send nudge), reachable
+                    // by desktop right-click or mobile long-press.
+                    return terminal ? (
+                      <PastBookingMenu key={b.id} bookingId={b.id} status={b.status}>
+                        {(menuProps) => block(menuProps)}
+                      </PastBookingMenu>
+                    ) : (
+                      block()
                     );
                   })}
                 </div>

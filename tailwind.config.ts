@@ -3,11 +3,11 @@ import tailwindcssAnimate from 'tailwindcss-animate';
 
 const config: Config = {
   darkMode: ['class'],
-  content: [
-    './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
-    './src/components/**/*.{js,ts,jsx,tsx,mdx}',
-    './src/app/**/*.{js,ts,jsx,tsx,mdx}',
-  ],
+  // Scans all of src/, not just pages/components/app — helpers like
+  // src/lib/booking-status-styles.ts return Tailwind class strings (badge
+  // background/border colors) that must also be scanned, or the JIT purges
+  // them and every status color silently disappears from the compiled CSS.
+  content: ['./src/**/*.{js,ts,jsx,tsx,mdx}'],
   theme: {
     extend: {
       colors: {
