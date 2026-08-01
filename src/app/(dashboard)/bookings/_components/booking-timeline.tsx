@@ -8,8 +8,11 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { bookingStatusStyle } from '@/lib/booking-status-styles';
 import { rescheduleBooking } from '@/server/actions/bookings';
 import { toast } from 'sonner';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ReassignDialog } from './reassign-dialog';
-import { PastBookingMenu, type PastBookingMenuProps } from './past-booking-menu';
+import { PastBookingMenu } from './past-booking-menu';
+import { ActiveBookingMenu } from './active-booking-menu';
+import { BookingForm, type BookingPrefill } from './booking-form';
 import type { BookingStatus } from '@/types';
 
 type TimelineBooking = {
@@ -20,12 +23,21 @@ type TimelineBooking = {
   clientName: string;
   serviceName: string;
   stylistId: string;
+  serviceId?: string;
+  serviceDuration?: number;
 };
 
 type StylistColumn = {
   id: string;
   name: string;
   availability: { startTime: string; endTime: string }[];
+};
+
+type ServiceOption = { id: string; name: string; price: number; duration: number };
+type StylistOption = {
+  id: string;
+  name: string;
+  availability: { dayOfWeek: number; startTime: string; endTime: string }[];
 };
 
 const START_HOUR = 6;
@@ -42,10 +54,14 @@ export function BookingTimeline({
   bookings,
   stylists,
   date,
+  services,
+  stylistsByService,
 }: {
   bookings: TimelineBooking[];
   stylists: StylistColumn[];
   date: string;
+  services: ServiceOption[];
+  stylistsByService: Record<string, StylistOption[]>;
 }) {
   const [dragState, setDragState] = useState<{
     bookingId: string;
@@ -59,6 +75,9 @@ export function BookingTimeline({
   } | null>(null);
   const [optimisticBookings, setOptimisticBookings] = useState<TimelineBooking[]>(bookings);
   const [reassignTarget, setReassignTarget] = useState<StylistColumn | null>(null);
+  // Set when an empty cell is tapped — opens the same booking flow as "New
+  // Booking", pre-aimed at that stylist and time.
+  const [createPrefill, setCreatePrefill] = useState<BookingPrefill | null>(null);
   const columnRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
   useMemo(() => {
@@ -206,6 +225,40 @@ export function BookingTimeline({
     setGhostPosition(null);
   }, []);
 
+  // Tapping an empty part of a stylist's column starts a new booking aimed
+  // at that stylist and the exact time tapped (snapped the same way drag
+  // does). Booking blocks sit on top of these cells in paint order, so a tap
+  // on an existing booking never reaches this handler.
+  const handleCellClick = useCallback(
+    (e: React.MouseEvent, stylist: StylistColumn) => {
+      const column = columnRefs.current.get(stylist.id);
+      if (!column) return;
+
+      const rect = column.getBoundingClientRect();
+      const y = e.clientY - rect.top;
+      const snappedMinutes = pxToSnappedMinutes(y);
+
+      const [year, month, day] = date.split('-').map(Number);
+      const slotStart = new Date(
+        year,
+        month - 1,
+        day,
+        Math.floor(snappedMinutes / 60),
+        snappedMinutes % 60,
+        0,
+        0
+      );
+
+      setCreatePrefill({
+        stylistId: stylist.id,
+        stylistName: stylist.name,
+        defaultDate: new Date(year, month - 1, day),
+        slotStart: slotStart.toISOString(),
+      });
+    },
+    [date]
+  );
+
   return (
     <TooltipProvider delayDuration={200}>
       <div className="overflow-x-auto rounded-lg border">
@@ -273,13 +326,14 @@ export function BookingTimeline({
                   onDragOver={(e) => handleDragOver(e, stylist.id)}
                   onDrop={(e) => handleDrop(e, stylist.id)}
                 >
-                  {/* Hour grid cells */}
+                  {/* Hour grid cells — tap an empty one to start a booking */}
                   {hours.map((h, i) => {
                     const available = isHourAvailable(stylist, h);
                     return (
                       <div
                         key={h}
-                        className={`absolute w-full border-b ${
+                        onClick={(e) => handleCellClick(e, stylist)}
+                        className={`absolute w-full cursor-pointer border-b ${
                           available
                             ? i % 2 === 0
                               ? 'bg-background'
@@ -314,7 +368,7 @@ export function BookingTimeline({
                     const isCompact = rawHeight < 45;
                     const timeStr = `${format(new Date(b.startTime), 'HH:mm')}–${format(new Date(b.endTime), 'HH:mm')}`;
 
-                    const block = (menuProps?: PastBookingMenuProps) => (
+                    const block = (menuProps?: React.HTMLAttributes<HTMLDivElement>) => (
                       <Tooltip key={b.id}>
                         <TooltipTrigger asChild>
                           <div
@@ -368,13 +422,29 @@ export function BookingTimeline({
                     // Terminal (past) bookings aren't draggable and have no
                     // other interaction — give them the same context menu the
                     // list view uses (view / rebook / send nudge), reachable
-                    // by desktop right-click or mobile long-press.
-                    return terminal ? (
-                      <PastBookingMenu key={b.id} bookingId={b.id} status={b.status}>
+                    // by desktop right-click or mobile long-press. Active
+                    // (non-terminal) bookings surface their status options
+                    // the same way — tap/click the block itself — since the
+                    // compact timeline block has no room for a dedicated
+                    // "..." button like the list view's rows have.
+                    if (terminal) {
+                      return (
+                        <PastBookingMenu key={b.id} bookingId={b.id} status={b.status}>
+                          {(menuProps) => block(menuProps)}
+                        </PastBookingMenu>
+                      );
+                    }
+                    return (
+                      <ActiveBookingMenu
+                        key={b.id}
+                        bookingId={b.id}
+                        serviceId={b.serviceId}
+                        serviceDuration={b.serviceDuration}
+                        stylistId={b.stylistId}
+                        startTime={b.startTime}
+                      >
                         {(menuProps) => block(menuProps)}
-                      </PastBookingMenu>
-                    ) : (
-                      block()
+                      </ActiveBookingMenu>
                     );
                   })}
                 </div>
@@ -403,6 +473,28 @@ export function BookingTimeline({
           otherStylists={stylists.filter((s) => s.id !== reassignTarget.id)}
         />
       )}
+
+      {/* New booking from a tapped cell */}
+      <Dialog
+        open={!!createPrefill}
+        onOpenChange={(open) => {
+          if (!open) setCreatePrefill(null);
+        }}
+      >
+        <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>New Booking</DialogTitle>
+          </DialogHeader>
+          {createPrefill && (
+            <BookingForm
+              services={services}
+              stylistsByService={stylistsByService}
+              prefill={createPrefill}
+              onClose={() => setCreatePrefill(null)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </TooltipProvider>
   );
 }

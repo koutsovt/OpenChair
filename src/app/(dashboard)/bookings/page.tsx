@@ -143,7 +143,13 @@ export default async function BookingsPage({
       ) : view === 'list' ? (
         <BookingList bookings={bookingRows} />
       ) : (
-        <BookingTimeline bookings={bookingRows} stylists={stylists} date={dateStr} />
+        <BookingTimeline
+          bookings={bookingRows}
+          stylists={stylists}
+          date={dateStr}
+          services={serviceOptions}
+          stylistsByService={stylistsByService}
+        />
       )}
     </div>
   );

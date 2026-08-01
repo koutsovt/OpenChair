@@ -62,7 +62,9 @@ type ClientOption = {
 
 type SlotOption = { start: string; end: string };
 
-// Pre-filled selections, e.g. when rebooking an existing appointment.
+// Pre-filled selections, e.g. when rebooking an existing appointment, or
+// tapping an empty cell on the timeline (stylist + exact time known, service
+// still needs picking — see slotStart below).
 export type BookingPrefill = {
   serviceId?: string;
   stylistId?: string;
@@ -71,6 +73,7 @@ export type BookingPrefill = {
   guest?: { name: string; phone: string };
   defaultDate?: Date;
   startAtStep?: number;
+  slotStart?: string;
 };
 
 export function BookingForm({
@@ -98,6 +101,10 @@ export function BookingForm({
   const [guestPhone, setGuestPhone] = useState(prefill?.guest?.phone ?? '');
   const [notes, setNotes] = useState('');
   const [isGuest, setIsGuest] = useState(!!prefill?.guest);
+  // Captured once at mount, not re-read reactively — matches how the rest of
+  // `prefill` only seeds initial state. Used to auto-select the tapped slot
+  // once real availability for the chosen service/stylist is fetched.
+  const [prefilledSlotStart] = useState(prefill?.slotStart ?? '');
 
   // Loaded data
   const [slots, setSlots] = useState<SlotOption[]>([]);
@@ -135,7 +142,16 @@ export function BookingForm({
       serviceId,
       date.toISOString()
     )
-      .then(setSlots)
+      .then((fetchedSlots) => {
+        setSlots(fetchedSlots);
+        // A cell was tapped on the timeline with an exact time in mind —
+        // honor it if it's still a real available slot. Guarded with
+        // `prev ||` so it never clobbers a choice the user already made.
+        if (prefilledSlotStart) {
+          const match = fetchedSlots.find((s) => s.start === prefilledSlotStart);
+          if (match) setSlotStart((prev) => prev || match.start);
+        }
+      })
       .finally(() => setLoadingSlots(false));
 
     // Fetch suggested slots
@@ -164,12 +180,14 @@ export function BookingForm({
         const sameDay = s.find(
           (slot) => new Date(slot.start).toDateString() === date.toDateString()
         );
-        if (sameDay) {
+        // Skip the generic "recommended time" default when a specific slot
+        // was tapped on the timeline — that explicit choice always wins.
+        if (sameDay && !prefilledSlotStart) {
           setSlotStart((prev) => prev || sameDay.start);
         }
       })
       .catch(() => setSuggestions([]));
-  }, [stylistId, serviceId, date, availableStylists]);
+  }, [stylistId, serviceId, date, availableStylists, prefilledSlotStart]);
 
   // Client search
   const handleClientSearch = useCallback((query: string) => {
@@ -251,6 +269,8 @@ export function BookingForm({
       if (singleStylist) {
         setStylistId(availableStylists[0].id);
         setStep(3);
+      } else if (preselectedStylistUsable) {
+        setStep(3);
       } else {
         setStep(2);
       }
@@ -269,6 +289,10 @@ export function BookingForm({
   const selectedClient = clients.find((c) => c.id === clientId);
   // With a single qualified stylist there is nothing to choose — skip step 2.
   const singleStylist = availableStylists.length === 1;
+  // A stylist was already chosen before service (e.g. tapping a cell on the
+  // timeline) and still does the newly-picked service — no need to ask again.
+  const preselectedStylistUsable =
+    !!stylistId && stylistId !== 'auto' && availableStylists.some((s) => s.id === stylistId);
 
   // Stylists allocated on the selected date listed first.
   const sortedStylists = useMemo(() => {
@@ -309,7 +333,13 @@ export function BookingForm({
                 className={`cursor-pointer transition-colors ${serviceId === s.id ? 'border-primary ring-2 ring-primary/20' : 'hover:border-primary/50'}`}
                 onClick={() => {
                   setServiceId(s.id);
-                  setStylistId('');
+                  // Keep a pre-filled stylist (e.g. from tapping a timeline
+                  // cell) if they still do the newly-picked service —
+                  // otherwise the "skip step 2" logic below never fires
+                  // because the prefill gets wiped out right here.
+                  setStylistId((prev) =>
+                    prev && stylistsByService[s.id]?.some((st) => st.id === prev) ? prev : ''
+                  );
                 }}
               >
                 <CardContent className="p-4">
@@ -331,6 +361,8 @@ export function BookingForm({
               onClick={() => {
                 if (singleStylist) {
                   setStylistId(availableStylists[0].id);
+                  setStep(3);
+                } else if (preselectedStylistUsable) {
                   setStep(3);
                 } else {
                   setStep(2);
@@ -452,7 +484,10 @@ export function BookingForm({
             </div>
           </div>
           <div className="flex justify-between">
-            <Button variant="outline" onClick={() => setStep(singleStylist ? 1 : 2)}>
+            <Button
+              variant="outline"
+              onClick={() => setStep(singleStylist || preselectedStylistUsable ? 1 : 2)}
+            >
               Back
             </Button>
             <Button onClick={() => setStep(clientId ? 5 : 4)} disabled={!slotStart}>
