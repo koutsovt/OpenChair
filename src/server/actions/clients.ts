@@ -4,7 +4,8 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { parse, isValid } from 'date-fns';
 import { prisma } from '@/lib/prisma';
-import { getAuthenticatedSalon } from '@/server/auth';
+import { getAuthenticatedSalon, getAuthenticatedUserId } from '@/server/auth';
+import { audit } from '@/lib/audit';
 
 const clientSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -190,6 +191,15 @@ export async function deleteClient(id: string) {
   await prisma.client.update({
     where: { id },
     data: { isActive: false },
+  });
+
+  const actorUserId = await getAuthenticatedUserId();
+  void audit({
+    salonId: salon.id,
+    actorUserId,
+    action: 'client.deleted',
+    resourceType: 'client',
+    resourceId: id,
   });
 
   revalidatePath('/clients');

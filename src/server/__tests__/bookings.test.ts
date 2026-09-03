@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mockGetAuthenticatedSalon = vi.fn();
+const mockGetAuthenticatedUserId = vi.fn();
+const mockAudit = vi.fn();
 const mockServiceFindFirst = vi.fn();
 const mockStylistFindFirst = vi.fn();
 const mockClientFindFirst = vi.fn();
@@ -20,6 +22,11 @@ const mockRevalidatePath = vi.fn();
 
 vi.mock('@/server/auth', () => ({
   getAuthenticatedSalon: (...args: unknown[]) => mockGetAuthenticatedSalon(...args),
+  getAuthenticatedUserId: (...args: unknown[]) => mockGetAuthenticatedUserId(...args),
+}));
+
+vi.mock('@/lib/audit', () => ({
+  audit: (...args: unknown[]) => mockAudit(...args),
 }));
 
 vi.mock('@/lib/prisma', () => ({
@@ -119,8 +126,12 @@ beforeEach(() => {
   mockStylistFindMany.mockReset();
   mockFindConflictingBooking.mockReset();
   mockGetSuggestedSlots.mockReset();
+  mockGetAuthenticatedUserId.mockReset();
+  mockAudit.mockReset();
 
   mockGetAuthenticatedSalon.mockResolvedValue(defaultSalon);
+  mockGetAuthenticatedUserId.mockResolvedValue('user-1');
+  mockAudit.mockResolvedValue(undefined);
   mockSendSMS.mockResolvedValue({ success: true, sid: 'SM123' });
   mockGetSuggestedSlots.mockResolvedValue([]);
 });

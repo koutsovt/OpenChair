@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mockGetAuthenticatedSalon = vi.fn();
+const mockGetAuthenticatedUserId = vi.fn();
+const mockAudit = vi.fn();
 const mockClientCreate = vi.fn();
 const mockClientFindFirst = vi.fn();
 const mockClientFindMany = vi.fn();
@@ -9,6 +11,11 @@ const mockRevalidatePath = vi.fn();
 
 vi.mock('@/server/auth', () => ({
   getAuthenticatedSalon: (...args: unknown[]) => mockGetAuthenticatedSalon(...args),
+  getAuthenticatedUserId: (...args: unknown[]) => mockGetAuthenticatedUserId(...args),
+}));
+
+vi.mock('@/lib/audit', () => ({
+  audit: (...args: unknown[]) => mockAudit(...args),
 }));
 
 vi.mock('@/lib/prisma', () => ({
@@ -55,8 +62,12 @@ beforeEach(() => {
   mockClientFindMany.mockReset();
   mockClientUpdate.mockReset();
   mockRevalidatePath.mockReset();
+  mockGetAuthenticatedUserId.mockReset();
+  mockAudit.mockReset();
 
   mockGetAuthenticatedSalon.mockResolvedValue(defaultSalon);
+  mockGetAuthenticatedUserId.mockResolvedValue('user-1');
+  mockAudit.mockResolvedValue(undefined);
 });
 
 describe('createClient', () => {

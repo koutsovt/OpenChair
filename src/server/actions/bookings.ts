@@ -18,7 +18,8 @@ import { env } from '@/lib/env';
 import { autoAssignStylist } from '@/lib/scheduling/auto-assign';
 import { matchWaitlistEntries, notifyWaitlistClient } from '@/lib/scheduling/waitlist';
 import { getSuggestedSlots as getSuggestedSlotsLib } from '@/lib/scheduling/smart-suggestions';
-import { getAuthenticatedSalon } from '@/server/auth';
+import { getAuthenticatedSalon, getAuthenticatedUserId } from '@/server/auth';
+import { audit } from '@/lib/audit';
 import type { BookingStatus } from '@/types';
 
 export async function createBooking(data: {
@@ -215,6 +216,15 @@ export async function updateBookingStatus(
 
   // When a booking is cancelled, check waitlist for matching entries
   if (status === 'CANCELLED') {
+    const actorUserId = await getAuthenticatedUserId();
+    void audit({
+      salonId: salon.id,
+      actorUserId,
+      action: 'booking.cancelled',
+      resourceType: 'booking',
+      resourceId: booking.id,
+    });
+
     void (async () => {
       const matches = await matchWaitlistEntries(
         salon.id,
